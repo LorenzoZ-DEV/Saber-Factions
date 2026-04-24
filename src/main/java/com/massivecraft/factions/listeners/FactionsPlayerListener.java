@@ -504,7 +504,8 @@ public class FactionsPlayerListener implements Listener {
             Bukkit.getServer().getPluginManager().callEvent(new FPlayerEnteredFactionEvent(factionTo, factionFrom, me));
             if (me.hasNotificationsEnabled() && FactionsPlugin.getInstance().getConfig().getBoolean("Title.Show-Title")) {
                 if (FactionsPlugin.getInstance().getConfig().getBoolean("Title.Cached")) {
-                    player.setMetadata("showFactionTitle", new FixedMetadataValue(FactionsPlugin.getInstance(), true));
+                    com.massivecraft.factions.util.PlayerDataRegistry.setFlag(player.getUniqueId(),
+                            com.massivecraft.factions.util.PlayerDataRegistry.FLAG_SHOW_FACTION_TITLE);
                 } else {
                     TitleUtil.sendFactionChangeTitle(me, factionTo);
                 }

@@ -5,6 +5,7 @@ import com.massivecraft.factions.FPlayer;
 import com.massivecraft.factions.FPlayers;
 import com.massivecraft.factions.struct.Relation;
 import com.massivecraft.factions.util.Lazy;
+import com.massivecraft.factions.util.PlayerDataRegistry;
 import com.massivecraft.factions.zcore.util.TL;
 import org.bukkit.Material;
 import org.bukkit.entity.Entity;
@@ -38,7 +39,7 @@ public class EnemySpawnerMine implements Listener {
         for (Entity e : player.getNearbyEntities(d, d, d)) {
             if (e.getType() == EntityType.PLAYER) {
                 Player eplayer = (Player) e;
-                if (eplayer.hasMetadata("NPC")) continue;
+                if (PlayerDataRegistry.isNpc(eplayer)) continue;
                 FPlayer efplayer = FPlayers.getInstance().getByPlayer(eplayer);
                 if (efplayer == null) continue;
                 if (!player.canSee(eplayer)) continue;

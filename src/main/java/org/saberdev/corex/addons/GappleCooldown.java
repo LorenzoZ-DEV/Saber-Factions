@@ -23,7 +23,7 @@ public class GappleCooldown implements Listener {
         if(e.getItem().getType() == this.enchantedGoldenApple.get()) {
             if(Cooldown.isOnCooldown(e.getPlayer(), "godAppleCooldown")) {
                 e.setCancelled(true);
-                long remaining = e.getPlayer().getMetadata("godAppleCooldown").get(0).asLong() - System.currentTimeMillis();
+                long remaining = Cooldown.getRemaining(e.getPlayer(), "godAppleCooldown");
                 int remainSec = (int) (remaining / 1000L);
                 e.getPlayer().sendMessage(TextUtil.parse(TL.GOD_APPLE_COOLDOWN.toString().replace("{seconds}", TimeUtil.formatSeconds(remainSec))));
             } else {

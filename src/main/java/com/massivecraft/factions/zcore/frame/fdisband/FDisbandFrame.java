@@ -66,8 +66,10 @@ public class FDisbandFrame extends SaberGUI {
     }
 
     private void setPlayerMetadata(FPlayer fPlayer) {
-        fPlayer.getPlayer().setMetadata("disband_confirm",
-                new FixedMetadataValue(FactionsPlugin.getInstance(), System.currentTimeMillis()));
+        com.massivecraft.factions.util.PlayerDataRegistry.setExpireAt(
+                fPlayer.getPlayer().getUniqueId(),
+                com.massivecraft.factions.util.PlayerDataRegistry.TS_DISBAND_CONFIRM,
+                System.currentTimeMillis() + java.util.concurrent.TimeUnit.SECONDS.toMillis(3L));
     }
 
     private void executeDisbandCommand(FPlayer fPlayer) {

@@ -256,7 +256,7 @@ public class CommandContext {
     private Player strAsPlayer(String name, Player def, boolean msg) {
         Player ret = def;
         if (name != null) {
-            Player player = Bukkit.getPlayer(name);
+            Player player = com.massivecraft.factions.util.PlayerCacheManager.getPlayerByName(name);
             if (player != null) {
                 ret = player;
             }

@@ -1,6 +1,6 @@
 package org.saberdev.corex.addons;
 
-import com.massivecraft.factions.FactionsPlugin;
+import com.massivecraft.factions.util.PlayerDataRegistry;
 import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
@@ -11,7 +11,6 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
-import org.bukkit.metadata.FixedMetadataValue;
 import org.saberdev.corex.CoreAddon;
 
 @CoreAddon(configVariable = "Armor-Swap")
@@ -73,14 +72,15 @@ public class ArmorSwap implements Listener {
             return;
         String worldName = e.getPlayer().getWorld().getName();
         Player p = e.getPlayer();
-        if (p.hasMetadata("lastArmorSwap") && System.currentTimeMillis() - p.getMetadata("lastArmorSwap").get(0).asLong() <= 12L)
+        long lastSwap = PlayerDataRegistry.getExpireAt(p.getUniqueId(), PlayerDataRegistry.TS_LAST_ARMOR_SWAP);
+        if (lastSwap != 0L && System.currentTimeMillis() - lastSwap <= 12L)
             return;
-        if (e.isCancelled() && p.hasMetadata("noArmorSwap"))
+        if (e.isCancelled() && PlayerDataRegistry.hasFlag(p.getUniqueId(), PlayerDataRegistry.FLAG_NO_ARMOR_SWAP))
             return;
         e.setCancelled(true);
         e.setUseInteractedBlock(Event.Result.DENY);
         e.setUseItemInHand(Event.Result.DENY);
-        p.setMetadata("lastArmorSwap", new FixedMetadataValue(FactionsPlugin.getInstance(), System.currentTimeMillis()));
+        PlayerDataRegistry.setExpireAt(p.getUniqueId(), PlayerDataRegistry.TS_LAST_ARMOR_SWAP, System.currentTimeMillis());
         equipArmor(p, e.getItem());
     }
 }

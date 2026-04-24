@@ -34,18 +34,21 @@ public class CmdNear extends FCommand {
         double range = FactionsPlugin.getInstance().getConfig().getInt("fnear.Radius");
         String format = TL.COMMAND_NEAR_FORMAT.toString();
         context.msg(TL.COMMAND_NEAR_USE_MSG);
-        for (Entity e : context.player.getNearbyEntities(range, 255, range)) {
-            if (e instanceof Player) {
-                Player player = (((Player) e).getPlayer());
-                FPlayer fplayer = FPlayers.getInstance().getByPlayer(player);
-                if (context.faction == fplayer.getFaction()) {
-                    double distance = context.player.getLocation().distance(player.getLocation());
-                    context.sendMessage(format.replace("{playername}", player.getDisplayName()).replace("{distance}", (int) distance + ""));
-                }
-            }
 
+        // Reuse a single Location reference instead of reallocating inside the loop.
+        org.bukkit.Location myLoc = context.player.getLocation();
+        for (Entity e : context.player.getNearbyEntities(range, 255, range)) {
+            if (!(e instanceof Player)) continue;
+            Player player = (Player) e;
+            if (com.massivecraft.factions.util.PlayerDataRegistry.isNpc(player)) continue;
+            FPlayer fplayer = FPlayers.getInstance().getByPlayer(player);
+            if (context.faction != fplayer.getFaction()) continue;
+
+            double distance = player.getLocation().distance(myLoc);
+            context.sendMessage(format.replace("{playername}", player.getDisplayName()).replace("{distance}", (int) distance + ""));
         }
     }
+
 
     @Override
     public TL getUsageTranslation() {

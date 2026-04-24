@@ -4,6 +4,7 @@ import com.cryptomorin.xseries.messages.Titles;
 import com.massivecraft.factions.FPlayer;
 import com.massivecraft.factions.Faction;
 import com.massivecraft.factions.FactionsPlugin;
+import com.massivecraft.factions.util.PlayerDataRegistry;
 import com.massivecraft.factions.zcore.util.TagUtil;
 import com.massivecraft.factions.zcore.util.TextUtil;
 import org.bukkit.Bukkit;
@@ -29,7 +30,7 @@ public class TitleUtil {
                     me.getPlayer().sendTitle(TextUtil.parse(title), TextUtil.parse(subTitle));
                 }
             }, 5);
-            me.getPlayer().removeMetadata("showFactionTitle", FactionsPlugin.getInstance());
+            PlayerDataRegistry.clearFlag(me.getPlayer().getUniqueId(), PlayerDataRegistry.FLAG_SHOW_FACTION_TITLE);
         }
     }
 

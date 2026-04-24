@@ -51,7 +51,9 @@ public class FactionWarpsFrame extends SaberGUI {
 
     private void doWarmup(final String warp, FPlayer fme, Faction faction) {
         WarmUpUtil.process(fme, WarmUpUtil.Warmup.WARP, TL.WARMUPS_NOTIFY_TELEPORT, warp, () -> {
-            Player player = Bukkit.getPlayer(fme.getPlayer().getUniqueId());
+            // fme.getPlayer() is now backed by PlayerCacheManager (O(1)). No
+            // need to redo a second Bukkit.getPlayer(uuid) lookup here.
+            Player player = fme.getPlayer();
             if (player != null) {
                 player.teleport(faction.getWarp(warp).getLocation());
                 fme.msg(TL.COMMAND_FWARP_WARPED, warp);

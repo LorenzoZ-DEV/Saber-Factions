@@ -15,39 +15,59 @@ import org.bukkit.entity.Player;
  */
 public class FlightEnhance implements Runnable {
 
+        // Cache of the ffly.AutoEnable flag — refreshed lazily every 20 s so the
+    // scheduler body never hits the YAML in hot path.
+    private static volatile long autoEnableCachedAt = 0L;
+    private static volatile boolean autoEnableCached = false;
+
+    private static boolean isAutoEnable() {
+        long now = System.currentTimeMillis();
+        if (now - autoEnableCachedAt > 20_000L) {
+            autoEnableCached = FactionsPlugin.getInstance().getConfig().getBoolean("ffly.AutoEnable");
+            autoEnableCachedAt = now;
+        }
+        return autoEnableCached;
+    }
+
     @Override
     public void run() {
+        // Evaluate once per tick, not once per player.
+        boolean autoEnable = isAutoEnable();
+
         for (FPlayer player : FPlayers.getInstance().getOnlinePlayers()) {
             if (shouldSkipPlayer(player)) continue;
 
-            FLocation fLocation = FLocation.wrap(player.getPlayer().getLocation());
+            // Use lastStoodAt (set by the move listener) instead of allocating
+            // a fresh Location + FLocation on every tick.
+            FLocation fLocation = player.getLastStoodAt();
             player.checkIfNearbyEnemies();
 
             if (!player.hasEnemiesNearby()) {
-                handleFlightStatusForPlayer(player, fLocation);
+                handleFlightStatusForPlayer(player, fLocation, autoEnable);
             }
         }
     }
 
     private boolean shouldSkipPlayer(FPlayer player) {
         Player p = player.getPlayer();
-
-        return player.isAdminBypassing()
-                || p == null
-                || p.isOp()
-                || p.getGameMode() == GameMode.CREATIVE
-                || p.getGameMode() == GameMode.SPECTATOR;
+        if (p == null) return true;
+        if (player.isAdminBypassing()) return true;
+        if (p.isOp()) return true;
+        GameMode gm = p.getGameMode();
+        return gm == GameMode.CREATIVE || gm == GameMode.SPECTATOR;
     }
 
-    private void handleFlightStatusForPlayer(FPlayer player, FLocation fLocation) {
-        if (player.isFlying() && !player.canFlyAtLocation(fLocation)) {
+    private void handleFlightStatusForPlayer(FPlayer player, FLocation fLocation, boolean autoEnable) {
+        boolean flying = player.isFlying();
+        // canFlyAtLocation is now cached per-chunk; this is the happy path.
+        boolean canFly = player.canFlyAtLocation(fLocation);
+
+        if (flying && !canFly) {
             player.setFlying(false, false);
             return;
         }
 
-        if (!player.isFlying()
-                && player.canFlyAtLocation()
-                && FactionsPlugin.getInstance().getConfig().getBoolean("ffly.AutoEnable")
+        if (!flying && canFly && autoEnable
                 && !FactionsEntityListener.combatList.contains(player.getPlayer().getUniqueId())) {
             player.setFlying(true);
         }

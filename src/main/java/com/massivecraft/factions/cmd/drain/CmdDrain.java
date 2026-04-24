@@ -41,7 +41,7 @@ public class CmdDrain extends FCommand {
             return;
         }
         if(Cooldown.isOnCooldown(context.player, "drainCooldown")) {
-            long remaining = context.player.getMetadata("drainCooldown").get(0).asLong() - System.currentTimeMillis();
+            long remaining = Cooldown.getRemaining(context.player, "drainCooldown");
             int remainSec = (int) (remaining / 1000L);
             context.msg(TextUtil.parse(TL.COMMAND_DRAIN_COOLDOWN.toString().replace("{seconds}", TimeUtil.formatSeconds(remainSec))));
             return;

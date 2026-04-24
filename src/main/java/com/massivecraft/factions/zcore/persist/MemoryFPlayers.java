@@ -43,8 +43,15 @@ public abstract class MemoryFPlayers extends FPlayers {
 
     @Override
     public FPlayer getByPlayer(Player player) {
+        // Fast path: player already cached — no UUID-to-string allocation.
+        FPlayer cached = this.bukkitFPlayers.get(player);
+        if (cached != null) return cached;
+
         String id = FastUUID.toString(player.getUniqueId());
-        return player.isOnline() ? this.bukkitFPlayers.computeIfAbsent(player, key -> getById(id)) : getById(id);
+        if (player.isOnline()) {
+            return this.bukkitFPlayers.computeIfAbsent(player, key -> getById(id));
+        }
+        return getById(id);
     }
 
     @Override

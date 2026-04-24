@@ -93,6 +93,12 @@ public abstract class MemoryFPlayer implements FPlayer {
     boolean inspectMode = false;
     boolean friendlyFire = false;
 
+    /**
+     * Cached UUID so {@link #getPlayer()} can avoid parsing the id String on
+     * every invocation. Lazily populated; intentionally non-serialised.
+     */
+    private transient UUID cachedUuid;
+
     public MemoryFPlayer() {
     }
 
@@ -226,6 +232,9 @@ public abstract class MemoryFPlayer implements FPlayer {
         if (alt) faction.addAltPlayer(this);
         else faction.addFPlayer(this);
         this.factionId = faction.getId();
+        // Faction changed → relations change too; drop cached fly evaluation.
+        UUID uid = this.cachedUuid;
+        if (uid != null) com.massivecraft.factions.util.flight.FlightCache.invalidate(uid);
     }
 
     @Override
@@ -715,9 +724,10 @@ public abstract class MemoryFPlayer implements FPlayer {
     public void onDeath() {
         this.updatePower();
 
-        if (this.getPlayer().hasMetadata("diedToPlayer")) {
+        UUID uuid = this.cachedUuid != null ? this.cachedUuid : FastUUID.parseUUID(this.getId());
+        if (PlayerDataRegistry.hasFlag(uuid, PlayerDataRegistry.FLAG_DIED_TO_PLAYER)) {
             this.alterPower(-Conf.deathToPlayerPowerLoss);
-            this.getPlayer().removeMetadata("diedToPlayer", FactionsPlugin.getInstance());
+            PlayerDataRegistry.clearFlag(uuid, PlayerDataRegistry.FLAG_DIED_TO_PLAYER);
         }
 
         this.alterPower(-Conf.powerPerDeath);
@@ -1078,7 +1088,12 @@ public abstract class MemoryFPlayer implements FPlayer {
     }
 
     public Player getPlayer() {
-        return Bukkit.getPlayer(FastUUID.parseUUID(this.getId()));
+        UUID uuid = this.cachedUuid;
+        if (uuid == null) {
+            uuid = FastUUID.parseUUID(this.getId());
+            this.cachedUuid = uuid;
+        }
+        return com.massivecraft.factions.util.PlayerCacheManager.getPlayer(uuid);
     }
 
     public boolean isOnline() {
@@ -1163,32 +1178,10 @@ public abstract class MemoryFPlayer implements FPlayer {
     }
 
     public boolean canFlyAtLocation(FLocation location) {
-        Faction faction = Board.getInstance().getFactionAt(location);
-
-        boolean access = faction.getAccess(this, PermissableAction.FLY) == Access.ALLOW;
-
-        if (faction.isWilderness()) {
-            return Permission.FLY_WILDERNESS.has(getPlayer());
-        } else if (faction.isSafeZone()) {
-            return Permission.FLY_SAFEZONE.has(getPlayer());
-        } else if (faction.isWarZone()) {
-            return Permission.FLY_WARZONE.has(getPlayer());
-        } else if (faction.getRelationTo(getFaction()) == Relation.ENEMY && Permission.FLY_ENEMY.has(getPlayer())) {
-            return true;
-        } else if (faction.getRelationTo(getFaction()) == Relation.ALLY && Permission.FLY_ALLY.has(getPlayer())) {
-            return true;
-        } else if (faction.getRelationTo(getFaction()) == Relation.TRUCE && Permission.FLY_TRUCE.has(getPlayer())) {
-            return true;
-        } else if (faction.getRelationTo(getFaction()) == Relation.NEUTRAL && !faction.isSystemFaction() && Permission.FLY_NEUTRAL.has(getPlayer())) {
-            return true;
-        }
-
-        // admin bypass (ops) can fly.
-        if (isAdminBypassing) {
-            return true;
-        }
-
-        return access;
+        // Delegate to the per-player chunk cache: the heavy work (Board lookup
+        // + 7 hasPermission calls) now runs only when the player crosses into
+        // a new chunk, not on every invocation.
+        return com.massivecraft.factions.util.flight.FlightCache.canFlyAt(this, location);
     }
 
     public boolean isAutoFlying() {
@@ -1325,27 +1318,14 @@ public abstract class MemoryFPlayer implements FPlayer {
         Player me = getPlayer();
         if (me == null || me.hasPermission("factions.fly.bypassnearbyenemycheck")) return;
 
-        int radius = Conf.stealthFlyCheckRadius;
-        int r2 = radius * radius;
+        // Detection is cached per-chunk + 750 ms TTL (EnemyProximityCache) and
+        // uses Player#getNearbyEntities with a clamped radius (EnemyDetector).
+        // Effects are applied through FlightEffects.
+        boolean found = com.massivecraft.factions.util.flight.EnemyProximityCache
+                .resolve(this, me, this.lastStoodAt);
 
-        boolean found = false;
-        for (Player other : me.getWorld().getPlayers()) {
-            if (other == me || other.hasMetadata("NPC")) continue;
-            if (!me.canSee(other)) continue;
-
-            // cheap distance squared
-            if (other.getLocation().distanceSquared(me.getLocation()) > r2) continue;
-
-            FPlayer efp = FPlayers.getInstance().getByPlayer(other);
-            if (efp == null || efp.isStealthEnabled()) continue;
-
-            if (getRelationTo(efp) == Relation.ENEMY) { found = true; break; }
-        }
-
-        if (found && me.isFlying()) {
-            setFlying(false);
-            msg(TL.COMMAND_FLY_ENEMY_NEAR);
-            Bukkit.getPluginManager().callEvent(new FPlayerStoppedFlying(this));
+        if (found) {
+            com.massivecraft.factions.util.flight.FlightEffects.stopForEnemyNearby(this, me);
         }
         enemiesNearby = found;
     }

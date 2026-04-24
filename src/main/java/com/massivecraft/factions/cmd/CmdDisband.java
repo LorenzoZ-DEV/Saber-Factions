@@ -93,10 +93,9 @@ public class CmdDisband extends FCommand {
     }
 
     private boolean isConfirmingDisband(CommandContext context) {
-        long time;
-        boolean access = context.fPlayer.getPlayer().hasMetadata("disband_confirm")
-                && (time = context.fPlayer.getPlayer().getMetadata("disband_confirm").get(0).asLong()) != 0L
-                && System.currentTimeMillis() - time <= TimeUnit.SECONDS.toMillis(3L);
+        boolean access = com.massivecraft.factions.util.PlayerDataRegistry.hasActive(
+                context.fPlayer.getPlayer().getUniqueId(),
+                com.massivecraft.factions.util.PlayerDataRegistry.TS_DISBAND_CONFIRM);
         return access || Conf.useDisbandGUI && (!context.fPlayer.isAdminBypassing() || !context.player.isOp()) && !disbandMap.containsKey(context.player.getUniqueId().toString());
     }
 

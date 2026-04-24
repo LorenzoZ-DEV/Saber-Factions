@@ -2,10 +2,10 @@ package com.massivecraft.factions.cmd.logout;
 
 import com.massivecraft.factions.Conf;
 import com.massivecraft.factions.FactionsPlugin;
+import com.massivecraft.factions.util.PlayerDataRegistry;
 import com.massivecraft.factions.zcore.util.TL;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.bukkit.metadata.FixedMetadataValue;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -40,7 +40,7 @@ public class LogoutHandler {
 
         Bukkit.getScheduler().runTaskLater(FactionsPlugin.getInstance(), () -> {
             if (isLogoutActive(player)) {
-                player.setMetadata("Logout", new FixedMetadataValue(FactionsPlugin.getInstance(), true));
+                PlayerDataRegistry.setFlag(player.getUniqueId(), PlayerDataRegistry.FLAG_LOGOUT);
                 player.kickPlayer(String.valueOf(TL.COMMAND_LOGOUT_KICK_MESSAGE));
                 cancelLogout(player);
             }

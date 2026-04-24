@@ -206,7 +206,7 @@ public class FactionsChatListener implements Listener {
 
     private void doWarmup(final String warp, final FPlayer fme) {
         WarmUpUtil.process(fme, WarmUpUtil.Warmup.WARP, TL.WARMUPS_NOTIFY_TELEPORT, warp, () -> {
-            Player player = Bukkit.getPlayer(fme.getPlayer().getUniqueId());
+            Player player = fme.getPlayer();
             if (player != null) {
                 player.teleport(fme.getFaction().getWarp(warp).getLocation());
                 fme.msg(TL.COMMAND_FWARP_WARPED, warp);

@@ -82,7 +82,7 @@ public class CmdAllyFWarp extends FCommand {
                 final FPlayer fPlayer = context.fPlayer;
                 final UUID uuid = context.player.getUniqueId();
                 context.doWarmUp(WarmUpUtil.Warmup.WARP, TL.WARMUPS_NOTIFY_TELEPORT, warpName, () -> {
-                    Player player = Bukkit.getPlayer(uuid);
+                    Player player = com.massivecraft.factions.util.PlayerCacheManager.getPlayer(uuid);
                     if (player != null) {
                         player.teleport(targetFaction.getWarp(warpName).getLocation());
                         fPlayer.msg(TL.COMMAND_FWARP_WARPED, warpName);

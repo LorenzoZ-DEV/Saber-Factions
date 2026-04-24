@@ -33,7 +33,7 @@ public class EnderPearlCooldown implements Listener {
 
         if (Cooldown.isOnCooldown(player, "enderPearlCooldown")) {
             event.setCancelled(true);
-            long remaining = player.getMetadata("enderPearlCooldown").get(0).asLong() - System.currentTimeMillis();
+            long remaining = Cooldown.getRemaining(player, "enderPearlCooldown");
             int remainingSeconds = (int) (remaining / 1000L);
             player.sendMessage(TextUtil.parse(TL.ENDER_PEARL_COOLDOWN.toString().replace("{seconds}", TimeUtil.formatSeconds(remainingSeconds))));
         } else {

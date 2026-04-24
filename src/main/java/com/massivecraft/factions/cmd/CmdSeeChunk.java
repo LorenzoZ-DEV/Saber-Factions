@@ -82,7 +82,7 @@ public class CmdSeeChunk extends FCommand {
 
             while (iterator.hasNext()) {
                 Map.Entry<String, Boolean> entry = iterator.next();
-                Player player = Bukkit.getPlayer(entry.getKey());
+                Player player = com.massivecraft.factions.util.PlayerCacheManager.getPlayerByName(entry.getKey());
 
                 if (player == null || !player.isOnline()) {
                     iterator.remove();

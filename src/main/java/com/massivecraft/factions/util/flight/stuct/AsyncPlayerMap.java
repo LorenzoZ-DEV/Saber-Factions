@@ -4,6 +4,7 @@ import com.massivecraft.factions.Board;
 import com.massivecraft.factions.FPlayer;
 import com.massivecraft.factions.FPlayers;
 import com.massivecraft.factions.Faction;
+import com.massivecraft.factions.util.PlayerDataRegistry;
 import com.massivecraft.factions.util.TitleUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -45,7 +46,7 @@ public class AsyncPlayerMap implements Runnable, Listener {
     }
 
     private void processPlayer(Player pl) {
-        if (pl.hasMetadata("showFactionTitle")) {
+        if (PlayerDataRegistry.hasFlag(pl.getUniqueId(), PlayerDataRegistry.FLAG_SHOW_FACTION_TITLE)) {
             FPlayer fPlayer = FPlayers.getInstance().getByPlayer(pl);
             Faction factionTo = Board.getInstance().getFactionAt(fPlayer.getLastStoodAt());
             TitleUtil.sendFactionChangeTitle(fPlayer, factionTo);

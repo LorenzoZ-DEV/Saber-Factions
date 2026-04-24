@@ -5,6 +5,7 @@ import com.massivecraft.factions.event.PowerLossEvent;
 import com.massivecraft.factions.struct.Relation;
 import com.massivecraft.factions.util.Logger;
 import com.massivecraft.factions.util.MiscUtil;
+import com.massivecraft.factions.util.PlayerDataRegistry;
 import com.massivecraft.factions.util.XPotionEffect;
 import com.massivecraft.factions.zcore.fperms.PermissableAction;
 import com.massivecraft.factions.zcore.util.TL;
@@ -50,7 +51,7 @@ public class FactionsEntityListener implements Listener {
         if (!(entity instanceof Player)) return;
         Player player = (Player) entity;
 
-        if(player.hasMetadata("NPC")) return;
+        if(PlayerDataRegistry.isNpc(player)) return;
 
         FPlayer fplayer = FPlayers.getInstance().getByPlayer(player);
         Faction faction = Board.getInstance().getFactionAt(FLocation.wrap(player.getLocation()));
@@ -86,7 +87,7 @@ public class FactionsEntityListener implements Listener {
         // Call player onDeath if the event is not cancelled and not using custom power
         if (!powerLossEvent.isCancelled() && !powerLossEvent.usingCustomPower()) {
             if (Conf.deathToPlayerPowerLoss > 0.0 && event.getEntity().getKiller() != null) {
-                player.setMetadata("diedToPlayer", new FixedMetadataValue(FactionsPlugin.getInstance(), true));
+                PlayerDataRegistry.setFlag(player.getUniqueId(), PlayerDataRegistry.FLAG_DIED_TO_PLAYER);
             }
             fplayer.onDeath();
         } else if (powerLossEvent.usingCustomPower() && !powerLossEvent.isCancelled()) {
@@ -393,7 +394,7 @@ public class FactionsEntityListener implements Listener {
     public boolean canDamagerHurtDamagee(Entity damager, Entity damagee, boolean notify) {
         damager = resolveDamager(damager);
 
-        if (!(damagee instanceof Player) || damagee.hasMetadata("NPC")) return true;
+        if (!(damagee instanceof Player) || PlayerDataRegistry.isNpc((Player) damagee)) return true;
 
         Player defenderPlayer = (Player) damagee;
         FPlayer defender = FPlayers.getInstance().getByPlayer(defenderPlayer);
@@ -444,8 +445,8 @@ public class FactionsEntityListener implements Listener {
 
         if (!attacker.getFaction().isNormal() || !defender.getFaction().isNormal()) return null;
 
-        boolean atkFF = attacker.getPlayer().hasMetadata("friendlyFire") || attacker.hasFriendlyFire();
-        boolean defFF = defender.getPlayer().hasMetadata("friendlyFire") || defender.hasFriendlyFire();
+        boolean atkFF = PlayerDataRegistry.hasFlag(attacker.getPlayer(), PlayerDataRegistry.FLAG_FRIENDLY_FIRE) || attacker.hasFriendlyFire();
+        boolean defFF = PlayerDataRegistry.hasFlag(defender.getPlayer(), PlayerDataRegistry.FLAG_FRIENDLY_FIRE) || defender.hasFriendlyFire();
 
         if (atkFF && defFF) {
             return Boolean.TRUE;
@@ -484,7 +485,8 @@ public class FactionsEntityListener implements Listener {
     }
 
     private boolean handleFriendlyFire(FPlayer attacker, FPlayer defender, boolean notify) {
-        if(attacker.getPlayer().hasMetadata("friendlyFire") && defender.getPlayer().hasMetadata("friendlyFire")) {
+        if(PlayerDataRegistry.hasFlag(attacker.getPlayer(), PlayerDataRegistry.FLAG_FRIENDLY_FIRE)
+                && PlayerDataRegistry.hasFlag(defender.getPlayer(), PlayerDataRegistry.FLAG_FRIENDLY_FIRE)) {
             return false;
         }
 

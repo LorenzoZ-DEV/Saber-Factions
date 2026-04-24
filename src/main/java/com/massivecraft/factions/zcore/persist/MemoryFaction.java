@@ -1101,6 +1101,18 @@ public abstract class MemoryFaction implements Faction, EconomyParticipator {
         return ret;
     }
 
+    /**
+     * Zero-allocation iteration over online members. Use this instead of
+     * {@link #getFPlayersWhereOnline(boolean)} whenever you are just going to
+     * loop over the result — it avoids allocating an intermediate {@code HashSet}.
+     * <p>The consumer <b>must not</b> mutate the underlying faction members.</p>
+     */
+    public void forEachOnline(java.util.function.Consumer<FPlayer> action) {
+        for (FPlayer fp : fplayers) {
+            if (fp.isOnline()) action.accept(fp);
+        }
+    }
+
     public Set<FPlayer> getFPlayersWhereOnline(boolean online, FPlayer viewer) {
         Set<FPlayer> ret = new HashSet<>();
         if (!this.isNormal()) return ret;

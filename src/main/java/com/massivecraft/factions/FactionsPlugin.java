@@ -151,7 +151,7 @@ public class FactionsPlugin extends MPlugin {
 
         StartupParameter.initData(this, () -> {
             if (getConfig().getBoolean("enable-faction-flight", true)) {
-                Bukkit.getServer().getScheduler().runTaskTimer(FactionsPlugin.getInstance(), new FlightEnhance(), 30L, 30L);
+                Bukkit.getServer().getScheduler().runTaskTimer(FactionsPlugin.getInstance(), new FlightEnhance(), 20L, 20L);
             }
 
             VersionProtocol.printVerionInfo();
@@ -172,6 +172,12 @@ public class FactionsPlugin extends MPlugin {
             startAutoLeaveTask(false);
 
             Bukkit.getPluginManager().registerEvents(new SaberGUIListener(), this);
+            Bukkit.getPluginManager().registerEvents(new com.massivecraft.factions.listeners.PlayerRegistryListener(), this);
+            // If the plugin is being reloaded with players already online, back-fill
+            // the cache — otherwise PlayerJoinEvent would never fire for them.
+            for (org.bukkit.entity.Player online : Bukkit.getOnlinePlayers()) {
+                com.massivecraft.factions.util.PlayerCacheManager.addPlayer(online);
+            }
             Bukkit.getPluginManager().registerEvents(factionsPlayerListener = new FactionsPlayerListener(), this);
 
             if (Conf.userSpawnerChunkSystem) {
@@ -293,6 +299,10 @@ public class FactionsPlugin extends MPlugin {
 
 
         ShutdownParameter.initShutdown(this);
+
+        // Drop the central Player cache; prevents holding references to
+        // stale Player instances across plugin reloads.
+        com.massivecraft.factions.util.PlayerCacheManager.clear();
 
         if (this.AutoLeaveTask != null) {
             getServer().getScheduler().cancelTask(this.AutoLeaveTask);

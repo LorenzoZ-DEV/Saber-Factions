@@ -5,7 +5,7 @@ import com.massivecraft.factions.FactionsPlugin;
 import com.massivecraft.factions.struct.Permission;
 import com.massivecraft.factions.zcore.util.TL;
 
-public class CmdViewChest extends FCommand {
+public class    CmdViewChest extends FCommand {
 
     /**
      * @author Driftay
