@@ -399,7 +399,6 @@ public class FactionsPlayerListener implements Listener {
         if (FactionsPlugin.instance.getConfig().getBoolean("scoreboard.default-enabled", false)) {
             FScoreboard.init(me);
             FScoreboard.get(me).setDefaultSidebar(new FDefaultSidebar());
-            FScoreboard.get(me).setSidebarVisibility(me.showScoreboard());
         }
 
         Faction myFaction = me.getFaction();

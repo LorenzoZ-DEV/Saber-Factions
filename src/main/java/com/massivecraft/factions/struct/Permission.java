@@ -148,6 +148,7 @@ public enum Permission {
     SETWARP("setwarp"),
     SHOP("shop"),
     TOP("top"),
+    FTOP("ftop"),
     VIEWCHEST("viewchest"),
     ADDPOINTS("addpoints"),
     REMOVEPOINTS("removepoints"),

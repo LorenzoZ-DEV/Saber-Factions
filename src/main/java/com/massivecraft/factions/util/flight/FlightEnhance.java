@@ -31,20 +31,23 @@ public class FlightEnhance implements Runnable {
 
     @Override
     public void run() {
-        // Evaluate once per tick, not once per player.
         boolean autoEnable = isAutoEnable();
 
         for (FPlayer player : FPlayers.getInstance().getOnlinePlayers()) {
             if (shouldSkipPlayer(player)) continue;
 
-            // Use lastStoodAt (set by the move listener) instead of allocating
-            // a fresh Location + FLocation on every tick.
             FLocation fLocation = player.getLastStoodAt();
-            player.checkIfNearbyEnemies();
+            boolean flying = player.isFlying();
 
-            if (!player.hasEnemiesNearby()) {
-                handleFlightStatusForPlayer(player, fLocation, autoEnable);
+            // Only run expensive nearby-enemy scan when player is actually
+            // flying. Non-flying players have nothing to lose from enemies
+            // nearby and autoEnable already checks canFlyAtLocation.
+            if (flying) {
+                player.checkIfNearbyEnemies();
+                if (player.hasEnemiesNearby()) continue;
             }
+
+            handleFlightStatusForPlayer(player, fLocation, flying, autoEnable);
         }
     }
 
@@ -57,9 +60,7 @@ public class FlightEnhance implements Runnable {
         return gm == GameMode.CREATIVE || gm == GameMode.SPECTATOR;
     }
 
-    private void handleFlightStatusForPlayer(FPlayer player, FLocation fLocation, boolean autoEnable) {
-        boolean flying = player.isFlying();
-        // canFlyAtLocation is now cached per-chunk; this is the happy path.
+    private void handleFlightStatusForPlayer(FPlayer player, FLocation fLocation, boolean flying, boolean autoEnable) {
         boolean canFly = player.canFlyAtLocation(fLocation);
 
         if (flying && !canFly) {

@@ -163,18 +163,6 @@
             </exclusions>
         </dependency>
         <dependency>
-            <groupId>be.maximvdw</groupId>
-            <artifactId>MVdWPlaceholderAPI</artifactId>
-            <version>3.1.1-SNAPSHOT</version>
-            <scope>provided</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.spigotmc</groupId>
-                    <artifactId>spigot</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
             <groupId>com.sk89q.worldedit</groupId>
             <artifactId>worldedit-bukkit</artifactId>
             <version>6.1.1-SNAPSHOT</version>

@@ -161,6 +161,7 @@ public class Aliases {
     public static ArrayList<String> title = new ArrayList<>(Collections.singletonList("title"));
     public static ArrayList<String> toggleAllianceChat = new ArrayList<>(Arrays.asList("tac", "ac", "togglealliancechat"));
     public static ArrayList<String> top = new ArrayList<>(Arrays.asList("t", "top"));
+    public static ArrayList<String> ftop = new ArrayList<>(Arrays.asList("ftop", "top", "t"));
     public static ArrayList<String> tpBanner = new ArrayList<>(Arrays.asList("tpbanner", "assist"));
     public static ArrayList<String> unban = new ArrayList<>(Collections.singletonList("unban"));
     public static ArrayList<String> upgrades = new ArrayList<>(Arrays.asList("upgrades", "upgrade"));
@@ -170,5 +171,10 @@ public class Aliases {
 
     public static void load() {
         FactionsPlugin.getInstance().persist.loadOrSaveDefault(i, Aliases.class, "aliases");
+        // Migration: the /f top + /f t shortcuts now route to the GUI (CmdFTop).
+        // Older aliases.json files only list "ftop" — patch them in-memory so existing
+        // installs pick up the new behavior without manually deleting the file.
+        if (!ftop.contains("top")) ftop.add("top");
+        if (!ftop.contains("t")) ftop.add("t");
     }
 }

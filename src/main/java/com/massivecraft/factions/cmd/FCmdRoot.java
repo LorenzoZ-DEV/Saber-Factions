@@ -9,6 +9,7 @@ import com.massivecraft.factions.cmd.chest.CmdChest;
 import com.massivecraft.factions.cmd.claim.*;
 import com.massivecraft.factions.cmd.drain.CmdDrain;
 import com.massivecraft.factions.cmd.econ.CmdMoney;
+import com.massivecraft.factions.cmd.ftop.CmdFTop;
 import com.massivecraft.factions.cmd.grace.CmdGrace;
 import com.massivecraft.factions.cmd.points.CmdPoints;
 import com.massivecraft.factions.cmd.relational.*;
@@ -167,6 +168,7 @@ public class FCmdRoot extends FCommand implements CommandExecutor {
     public CmdKick cmdKick = new CmdKick();
     public CmdAllyFWarp cmdAllyFWarp = new CmdAllyFWarp();
     public CmdRoster cmdRoster = new CmdRoster();
+    public CmdFTop cmdFTop = new CmdFTop();
 
 
     //Variables to know if we already set up certain sub commands
@@ -307,6 +309,7 @@ public class FCmdRoot extends FCommand implements CommandExecutor {
         this.addSubCommand(this.cmdSetRelation);
         this.addSubCommand(this.cmdSetDiscord);
         this.addSubCommand(this.cmdSeeDiscord);
+        this.addSubCommand(this.cmdFTop);
         addVariableCommands();
         if (CommodoreProvider.isSupported()) brigadierManager.build();
     }
@@ -358,12 +361,14 @@ public class FCmdRoot extends FCommand implements CommandExecutor {
         //} else {
         //    FactionsPlugin.getInstance().log("CoreProtect not found, disabling Inspect");
         //}
-        //FTOP
-        if ((Bukkit.getServer().getPluginManager().getPlugin("FactionsTop") != null || Bukkit.getServer().getPluginManager().getPlugin("SaberFTOP") != null || Bukkit.getServer().getPluginManager().getPlugin("SavageFTOP") != null || Bukkit.getServer().getPluginManager().getPlugin("SaberFTOP") != null) && !internalFTOPEnabled) {
-            Logger.print( "Found FactionsTop plugin. Disabling our own /f top command.", Logger.PrefixType.DEFAULT);
+        //FTOP — GUI version (CmdFTop) is registered unconditionally in the main constructor
+        // and now owns the "top"/"t" aliases. The legacy chat-pager CmdTop is no longer wired.
+        if (Bukkit.getServer().getPluginManager().getPlugin("FactionsTop") != null
+                || Bukkit.getServer().getPluginManager().getPlugin("SaberFTOP") != null
+                || Bukkit.getServer().getPluginManager().getPlugin("SavageFTOP") != null) {
+            Logger.print("Found external FactionsTop plugin. /f top will still open the internal GUI.", Logger.PrefixType.DEFAULT);
         } else {
-            Logger.print( "Internal Factions Top Being Used. NOTE: Very Basic", Logger.PrefixType.DEFAULT);
-            this.addSubCommand(this.cmdTop);
+            Logger.print("Internal Factions Top GUI active (/f top, /f t, /f ftop).", Logger.PrefixType.DEFAULT);
             internalFTOPEnabled = true;
         }
 

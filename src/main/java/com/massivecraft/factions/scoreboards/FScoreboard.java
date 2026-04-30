@@ -14,34 +14,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Packet-based sidebar wrapper built on top of FastBoard.
- *
- * <p>Guarantees:</p>
- * <ul>
- *     <li>The FastBoard (and its underlying scoreboard Objective) is created
- *         <b>once per player</b> in {@link #FScoreboard(FPlayer)} and is never
- *         recreated during the player's session.</li>
- *     <li>Line updates are performed via scoreboard Teams' prefix/suffix
- *         (handled internally by FastBoard) so they are flicker-free.</li>
- *     <li>A cache of the last rendered title / lines avoids spamming packets
- *         when nothing changed.</li>
- *     <li>Only the changed lines actually produce packets thanks to
- *         FastBoard's internal diffing.</li>
- *     <li>Up to {@value #MAX_LINES} dynamic lines are supported.</li>
- *     <li>Line generation (placeholders, tags) runs asynchronously via
- *         {@link CompletableFuture}; the actual scoreboard application runs on
- *         the main thread through the Bukkit scheduler.</li>
- *     <li>Refresh cadence is throttled to {@value #UPDATE_PERIOD_TICKS} ticks
- *         (2 Hz) — never per-tick.</li>
- *     <li>A single global task drives all players; there are no per-player
- *         BukkitRunnables.</li>
- * </ul>
+ * Single global tick task drives all players at {@value #UPDATE_PERIOD_TICKS} tick intervals.
  */
 public class FScoreboard {
 
@@ -69,10 +47,6 @@ public class FScoreboard {
     // nothing changed, cutting both allocations and packets.
     private volatile String lastAppliedTitle = "";
     private volatile List<String> lastAppliedLines = Collections.emptyList();
-
-    // Ensures at most one async render is in flight per player, preventing
-    // task pile-up under lag spikes.
-    private final AtomicBoolean renderInFlight = new AtomicBoolean(false);
 
     private FScoreboard(FPlayer fplayer) {
         this.fplayer = fplayer;
@@ -222,47 +196,25 @@ public class FScoreboard {
 
     // ---------------- Update pipeline ----------------
 
-    /**
-     * Schedules an async render + sync apply cycle. Guards against more than
-     * one concurrent render per player.
-     */
     private void requestUpdate() {
         if (fastBoard == null || fastBoard.isDeleted() || removed) return;
-        if (!renderInFlight.compareAndSet(false, true)) return;
 
         final FSidebarProvider provider = temporaryProvider != null ? temporaryProvider : defaultProvider;
         if (provider == null || !sidebarVisible) {
-            // No async work needed — just clear on the main thread if needed.
-            renderInFlight.set(false);
             applyHidden();
             return;
         }
 
-        final FactionsPlugin plugin = FactionsPlugin.getInstance();
-
-        CompletableFuture
-                .supplyAsync(() -> renderSnapshot(provider), r ->
-                        Bukkit.getScheduler().runTaskAsynchronously(plugin, r))
-                .whenComplete((snapshot, err) -> {
-                    // Apply on the main thread; never touch the scoreboard off-thread.
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        try {
-                            if (err == null && snapshot != null) {
-                                applySnapshot(snapshot);
-                            }
-                        } finally {
-                            renderInFlight.set(false);
-                        }
-                    });
-                });
+        try {
+            Snapshot snapshot = renderSnapshot(provider);
+            applySnapshot(snapshot);
+        } catch (Exception ex) {
+            FactionsPlugin.getInstance().getLogger().warning(
+                    "FScoreboard: render failed for " + fplayer.getName() + ": " + ex.getMessage());
+        }
     }
 
-    /**
-     * Builds the frame to apply. Runs off-thread. Must not touch the scoreboard.
-     * <p>Note: providers may internally use PlaceholderAPI / faction data. Those
-     * calls are treated as best-effort thread-safe here; exceptions are swallowed
-     * in {@link #requestUpdate()} and the last-known frame is kept.</p>
-     */
+    /** Builds the frame to apply. Runs on the main thread. */
     private Snapshot renderSnapshot(FSidebarProvider provider) {
         String title = provider.getTitle(fplayer);
         List<String> raw = provider.getLines(fplayer);
@@ -347,21 +299,11 @@ public class FScoreboard {
         }
     }
 
-    /** Clears the sidebar on the main thread, with caching. */
     private void applyHidden() {
         if (fastBoard == null || fastBoard.isDeleted() || removed) return;
         if (lastAppliedLines.isEmpty()) return;
-
-        Runnable clear = () -> {
-            if (fastBoard.isDeleted() || removed) return;
-            fastBoard.updateLines(Collections.emptyList());
-            lastAppliedLines = Collections.emptyList();
-        };
-        if (Bukkit.isPrimaryThread()) {
-            clear.run();
-        } else {
-            Bukkit.getScheduler().runTask(FactionsPlugin.getInstance(), clear);
-        }
+        fastBoard.updateLines(Collections.emptyList());
+        lastAppliedLines = Collections.emptyList();
     }
 
     /** Immutable rendered frame passed from the async render to the sync apply. */

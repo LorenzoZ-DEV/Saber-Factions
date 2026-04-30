@@ -11,6 +11,7 @@ import com.massivecraft.factions.cmd.CommandContext;
 import com.massivecraft.factions.cmd.FCmdRoot;
 import com.massivecraft.factions.cmd.FCommand;
 import com.massivecraft.factions.cmd.audit.FChestListener;
+import com.massivecraft.factions.cmd.ftop.FTopGUIListener;
 import com.massivecraft.factions.cmd.audit.FLogManager;
 import com.massivecraft.factions.cmd.audit.FLogType;
 import com.massivecraft.factions.cmd.chest.AntiChestListener;
@@ -102,7 +103,6 @@ public class FactionsPlugin extends MPlugin {
     private boolean locked = false;
     private Integer AutoLeaveTask = null;
     private ClipPlaceholderAPIManager clipPlaceholderAPIManager;
-    private boolean mvdwPlaceholderAPIManager = false;
 
     public FactionsPlugin() {
         instance = this;
@@ -178,6 +178,21 @@ public class FactionsPlugin extends MPlugin {
             for (org.bukkit.entity.Player online : Bukkit.getOnlinePlayers()) {
                 com.massivecraft.factions.util.PlayerCacheManager.addPlayer(online);
             }
+
+            // Back-fill scoreboards for already-online players (reload scenario).
+            if (getConfig().getBoolean("scoreboard.default-enabled", false)) {
+                for (org.bukkit.entity.Player online : Bukkit.getOnlinePlayers()) {
+                    FPlayer fp = FPlayers.getInstance().getByPlayer(online);
+                    if (fp != null) {
+                        com.massivecraft.factions.scoreboards.FScoreboard.init(fp);
+                        com.massivecraft.factions.scoreboards.FScoreboard fsb =
+                                com.massivecraft.factions.scoreboards.FScoreboard.get(fp);
+                        if (fsb != null) {
+                            fsb.setDefaultSidebar(new com.massivecraft.factions.scoreboards.sidebar.FDefaultSidebar());
+                        }
+                    }
+                }
+            }
             Bukkit.getPluginManager().registerEvents(factionsPlayerListener = new FactionsPlayerListener(), this);
 
             if (Conf.userSpawnerChunkSystem) {
@@ -194,6 +209,14 @@ public class FactionsPlugin extends MPlugin {
                 for (Faction faction : Factions.getInstance().getAllNormalFactions()) {
                     this.factionDataHelper.getOrLoadFactionData(faction);
                 }
+
+                // Build /ftop ranking once factions are loaded, then refresh
+                // it periodically off-thread so subsequent /ftop opens are
+                // served straight from cache without sorting on the click.
+                long ftopIntervalSeconds = getConfig().getLong("ftop.refresh-interval-seconds", 300L);
+                long ftopIntervalTicks = Math.max(0L, ftopIntervalSeconds) * 20L;
+                com.massivecraft.factions.cmd.ftop.FTopCache.getInstance()
+                        .startScheduledRefresh(this, ftopIntervalTicks);
             }, 10L);
 
             if (version > 8) {
@@ -210,7 +233,8 @@ public class FactionsPlugin extends MPlugin {
                     new MissionHandler(this),
                     new FChestListener(),
                     new MenuListener(),
-                    new AntiChestListener()
+                    new AntiChestListener(),
+                    new FTopGUIListener()
             })
                 Bukkit.getPluginManager().registerEvents(eventListener, this);
 
@@ -257,11 +281,6 @@ public class FactionsPlugin extends MPlugin {
             PlaceholderApi = false;
         }
 
-        Plugin mvdw = Bukkit.getPluginManager().getPlugin("MVdWPlaceholderAPI");
-        if (mvdw != null && mvdw.isEnabled()) {
-            this.mvdwPlaceholderAPIManager = true;
-            Logger.print("Found MVdWPlaceholderAPI. Adding hooks.", Logger.PrefixType.DEFAULT);
-        }
     }
 
 
@@ -277,9 +296,6 @@ public class FactionsPlugin extends MPlugin {
         return this.clipPlaceholderAPIManager != null;
     }
 
-    public boolean isMVdWPlaceholderAPIHooked() {
-        return this.mvdwPlaceholderAPIManager;
-    }
 
     private void setupPermissions() {
         try {
@@ -303,6 +319,9 @@ public class FactionsPlugin extends MPlugin {
         // Drop the central Player cache; prevents holding references to
         // stale Player instances across plugin reloads.
         com.massivecraft.factions.util.PlayerCacheManager.clear();
+
+        // Cancel periodic /ftop refresh + drop cached heads / snapshot.
+        com.massivecraft.factions.cmd.ftop.FTopCache.getInstance().clear();
 
         if (this.AutoLeaveTask != null) {
             getServer().getScheduler().cancelTask(this.AutoLeaveTask);

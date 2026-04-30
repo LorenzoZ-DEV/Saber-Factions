@@ -1370,6 +1370,22 @@ public enum TL {
     FACTIONS_TOP_POSITION_INVALID("N/A"),
     FACTIONS_TOP_WORTH_INVALID("$0.00"),
 
+    /**
+     * Factions Top GUI (/ftop) - richest factions leaderboard
+     */
+    FTOP_GUI_TITLE("&8&lTop Factions"),
+    FTOP_GUI_HEAD_NAME("&e&l{faction}"),
+    FTOP_GUI_HEAD_LORE_POSITION("&7Position: &c#{position}"),
+    FTOP_GUI_HEAD_LORE_BALANCE("&7Balance: &a${balance}"),
+    FTOP_GUI_HEAD_LORE_LEADER("&7Leader: &f{leader}"),
+    FTOP_GUI_NO_FACTIONS("&c&l[!] &7There are currently no factions to display."),
+    FTOP_GUI_LOADING("&c&l[!] &7Loading top factions, please wait..."),
+    FTOP_GUI_PREV_PAGE("&e&lPrevious Page"),
+    FTOP_GUI_NEXT_PAGE("&e&lNext Page"),
+    FTOP_GUI_PAGE_INDICATOR("&6&lPage &f{page}&7/&f{total}"),
+    FTOP_GUI_PAGE_INDICATOR_LORE("&7Total factions: &f{count}"),
+    FTOP_COMMAND_DESCRIPTION("Open the top richest factions GUI"),
+
 
     /**
      * Region types.
