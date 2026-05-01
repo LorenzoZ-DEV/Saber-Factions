@@ -31,7 +31,7 @@ public class MenuListener implements Listener {
         if (menu != null) {
             event.setCancelled(true);
             if (title == null || !menu.getName().equals(title)) {
-                event.getView().close();
+                ReflectionUtils.closeViewCompat(event);
                 return;
             }
 
@@ -60,7 +60,7 @@ public class MenuListener implements Listener {
     public void onPLayerLeave(PlayerQuitEvent event) {
         GUIMenu menu = GUIMenu.getMenus().remove(event.getPlayer().getUniqueId());
         if (menu != null && menu.getCloseCallback() != null) {
-            menu.getCloseCallback().accept(new InventoryCloseEvent(event.getPlayer().getOpenInventory()));
+            menu.getCloseCallback().accept(ReflectionUtils.createCloseEventCompat(event.getPlayer()));
         }
     }
 }

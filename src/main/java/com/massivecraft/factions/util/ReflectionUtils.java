@@ -1,8 +1,10 @@
 package com.massivecraft.factions.util;
 
 import org.bukkit.Bukkit;
-import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.inventory.InventoryView;
+import org.bukkit.entity.HumanEntity;
+import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryEvent;
+import org.bukkit.inventory.Inventory;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -32,25 +34,53 @@ public final class ReflectionUtils {
     private ReflectionUtils() {
     }
 
-    public static String resolveInventoryTitleCompat(InventoryClickEvent event) {
-        // Modern API (1.13+)
+    /**
+     * Calls {@code event.getView()} via reflection to avoid linking against
+     * {@code InventoryView} whose class/interface status changed across Bukkit versions.
+     */
+    public static Object getViewCompat(InventoryEvent event) {
         try {
-            InventoryView view = event.getView();
-            return view.getTitle();
+            return event.getClass().getMethod("getView").invoke(event);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static Inventory getTopInventoryCompat(InventoryEvent event) {
+        try {
+            Object view = getViewCompat(event);
+            return (Inventory) view.getClass().getMethod("getTopInventory").invoke(view);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static void closeViewCompat(InventoryEvent event) {
+        try {
+            Object view = getViewCompat(event);
+            view.getClass().getMethod("close").invoke(view);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static InventoryCloseEvent createCloseEventCompat(HumanEntity player) {
+        try {
+            Object view = player.getClass().getMethod("getOpenInventory").invoke(player);
+            Constructor<?> ctor = InventoryCloseEvent.class.getConstructors()[0];
+            return (InventoryCloseEvent) ctor.newInstance(view);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static String resolveInventoryTitleCompat(InventoryEvent event) {
+        try {
+            Object view = getViewCompat(event);
+            Object title = view.getClass().getMethod("getTitle").invoke(view);
+            if (title instanceof String) return (String) title;
         } catch (Throwable ignored) {
         }
-
-        // Legacy API (pre-1.13) - use reflection
-        try {
-            Object view = event.getView();
-            if (view != null) {
-                Method m = view.getClass().getMethod("getTitle");
-                Object title = m.invoke(view);
-                if (title instanceof String) return (String) title;
-            }
-        } catch (Throwable ignored) {
-        }
-
         return null;
     }
 
