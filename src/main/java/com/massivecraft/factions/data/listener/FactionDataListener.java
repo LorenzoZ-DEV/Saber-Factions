@@ -1,9 +1,11 @@
 package com.massivecraft.factions.data.listener;
 
+import com.massivecraft.factions.cmd.ftop.FTopCache;
 import com.massivecraft.factions.data.helpers.FactionDataHelper;
 import com.massivecraft.factions.event.FPlayerJoinEvent;
 import com.massivecraft.factions.event.FactionDisbandEvent;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 
 /**
@@ -21,11 +23,13 @@ public class FactionDataListener implements Listener {
     public void onFactionCreate(FPlayerJoinEvent event) {
         if (event.getReason() == FPlayerJoinEvent.PlayerJoinReason.CREATE) {
             factionDataHelper.getOrLoadFactionData(event.getFaction());
+            FTopCache.getInstance().invalidate();
         }
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onFactionDisband(FactionDisbandEvent event) {
         factionDataHelper.deleteFactionData(event.getFaction());
+        FTopCache.getInstance().invalidate();
     }
 }

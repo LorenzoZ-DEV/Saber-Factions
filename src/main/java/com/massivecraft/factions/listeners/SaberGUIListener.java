@@ -5,17 +5,19 @@ import com.massivecraft.factions.util.ReflectionUtils;
 import com.massivecraft.factions.util.SaberGUI;
 import com.massivecraft.factions.util.SaberGUIHolder;
 import com.massivecraft.factions.util.serializable.InventoryItem;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.server.PluginDisableEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -99,6 +101,15 @@ public class SaberGUIListener implements Listener {
             }
         } catch (Throwable t) {
             t.printStackTrace();
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onPlayerInteract(PlayerInteractEvent event) {
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK && event.getAction() != Action.LEFT_CLICK_BLOCK) return;
+        Player player = event.getPlayer();
+        if (SaberGUI.getActiveGUI(player.getUniqueId()) != null) {
+            event.setCancelled(true);
         }
     }
 

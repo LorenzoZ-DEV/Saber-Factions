@@ -10,6 +10,9 @@ commands:
   factions:
     description: Reference command for Factions.
     aliases: [f]
+  baltop:
+    description: View the richest players GUI.
+    aliases: [bt, moneytop, baltopgui]
 permissions:
   factions.kit.admin:
     description: All faction permissions.
@@ -153,6 +156,9 @@ permissions:
     description: ability to view a factions chest/pv
   factions.grace:
     description: gives ability to toggle grace period on and off
+  factions.gracetoggle:
+    description: admin-only - allows toggling the global grace period (blocks/enables TNT explosions server-wide)
+    default: op
   factions.invsee:
     description: Allows players to use the inventory see command
   factions.missions:
@@ -339,6 +345,9 @@ permissions:
   factions.ftop:
     default: true
     description: open the top richest factions GUI
+  factions.baltop:
+    default: true
+    description: open the top richest players GUI (/baltop)
   factions.togglealliancechat:
     description: toggle alliance chat on and off
   factions.dontlosepoweroffline:

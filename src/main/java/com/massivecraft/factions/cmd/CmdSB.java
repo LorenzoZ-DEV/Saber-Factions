@@ -1,14 +1,11 @@
 package com.massivecraft.factions.cmd;
 
 import com.massivecraft.factions.scoreboards.FScoreboard;
+import com.massivecraft.factions.scoreboards.sidebar.FDefaultSidebar;
 import com.massivecraft.factions.struct.Permission;
 import com.massivecraft.factions.zcore.util.TL;
 
 public class CmdSB extends FCommand {
-
-    /**
-     * @author FactionsUUID Team - Modified By CmdrKittens
-     */
 
     public CmdSB() {
         this.getAliases().addAll(Aliases.scoreboard);
@@ -21,7 +18,16 @@ public class CmdSB extends FCommand {
     @Override
     public void perform(CommandContext context) {
         boolean toggleTo = !context.fPlayer.showScoreboard();
+
         FScoreboard board = FScoreboard.get(context.fPlayer);
+        if (board == null && FScoreboard.isSupportedByServer()) {
+            FScoreboard.init(context.fPlayer);
+            board = FScoreboard.get(context.fPlayer);
+            if (board != null) {
+                board.setDefaultSidebar(new FDefaultSidebar());
+            }
+        }
+
         if (board == null) {
             context.msg(TL.COMMAND_TOGGLESB_DISABLED.toString());
         } else {

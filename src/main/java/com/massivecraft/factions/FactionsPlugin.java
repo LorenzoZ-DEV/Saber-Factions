@@ -76,7 +76,6 @@ public class FactionsPlugin extends MPlugin {
             .registerTypeAdapterFactory(EnumTypeAdapter.ENUM_FACTORY)
             .create();
 
-    //TODO REDO
     public static boolean cachedRadiusClaim;
 
     public static Permission perms = null;
@@ -84,13 +83,9 @@ public class FactionsPlugin extends MPlugin {
     private Map<String, FactionsAddon> factionsAddonHashMap;
     private final HashMap<Faction, String> shieldStatMap = new HashMap<>();
 
-    // This plugin sets the boolean true when fully enabled.
-    // Plugins can check this boolean while hooking in have
-    // a green light to use the api.
     public static boolean startupFinished = false;
     public boolean PlaceholderApi;
 
-    // Commands
     public FCmdRoot cmdBase;
     public CmdAutoHelp cmdAutoHelp;
     public short version;
@@ -146,7 +141,6 @@ public class FactionsPlugin extends MPlugin {
             return;
         }
 
-        // Load Conf from disk
         Conf.load();
 
         StartupParameter.initData(this, () -> {
@@ -155,7 +149,6 @@ public class FactionsPlugin extends MPlugin {
             }
 
             VersionProtocol.printVerionInfo();
-            // Add Base Commands
             this.cmdBase = new FCmdRoot();
             this.cmdAutoHelp = new CmdAutoHelp();
 
@@ -168,19 +161,15 @@ public class FactionsPlugin extends MPlugin {
                 }
             }
 
-            // start up task which runs the autoLeaveAfterDaysOfInactivity routine
             startAutoLeaveTask(false);
 
             Bukkit.getPluginManager().registerEvents(new SaberGUIListener(), this);
             Bukkit.getPluginManager().registerEvents(new com.massivecraft.factions.listeners.PlayerRegistryListener(), this);
-            // If the plugin is being reloaded with players already online, back-fill
-            // the cache — otherwise PlayerJoinEvent would never fire for them.
             for (org.bukkit.entity.Player online : Bukkit.getOnlinePlayers()) {
                 com.massivecraft.factions.util.PlayerCacheManager.addPlayer(online);
             }
 
-            // Back-fill scoreboards for already-online players (reload scenario).
-            if (getConfig().getBoolean("scoreboard.default-enabled", false)) {
+            if (getConfig().getBoolean("scoreboard.default-enabled", true)) {
                 for (org.bukkit.entity.Player online : Bukkit.getOnlinePlayers()) {
                     FPlayer fp = FPlayers.getInstance().getByPlayer(online);
                     if (fp != null) {
@@ -189,6 +178,7 @@ public class FactionsPlugin extends MPlugin {
                                 com.massivecraft.factions.scoreboards.FScoreboard.get(fp);
                         if (fsb != null) {
                             fsb.setDefaultSidebar(new com.massivecraft.factions.scoreboards.sidebar.FDefaultSidebar());
+                            fsb.setSidebarVisibility(fp.showScoreboard());
                         }
                     }
                 }
@@ -210,13 +200,15 @@ public class FactionsPlugin extends MPlugin {
                     this.factionDataHelper.getOrLoadFactionData(faction);
                 }
 
-                // Build /ftop ranking once factions are loaded, then refresh
-                // it periodically off-thread so subsequent /ftop opens are
-                // served straight from cache without sorting on the click.
                 long ftopIntervalSeconds = getConfig().getLong("ftop.refresh-interval-seconds", 300L);
                 long ftopIntervalTicks = Math.max(0L, ftopIntervalSeconds) * 20L;
                 com.massivecraft.factions.cmd.ftop.FTopCache.getInstance()
                         .startScheduledRefresh(this, ftopIntervalTicks);
+
+                long baltopIntervalSeconds = getConfig().getLong("baltop.refresh-interval-seconds", 300L);
+                long baltopIntervalTicks = Math.max(0L, baltopIntervalSeconds) * 20L;
+                com.massivecraft.factions.cmd.baltop.BalTopCache.getInstance()
+                        .startScheduledRefresh(this, baltopIntervalTicks);
             }, 10L);
 
             if (version > 8) {
@@ -249,7 +241,6 @@ public class FactionsPlugin extends MPlugin {
             AddonManager.getAddonManagerInstance().loadAddons();
 
             Bukkit.getScheduler().runTaskLater(this, () -> {
-                //To Add Addon Commands Into "Tab Completion Format"
                 if (!factionsAddonHashMap.isEmpty()) {
                     FCmdRoot.instance.addVariableCommands();
                     FCmdRoot.instance.rebuild();
@@ -259,10 +250,14 @@ public class FactionsPlugin extends MPlugin {
             this.getCommand(refCommand).setExecutor(cmdBase);
             if (!CommodoreProvider.isSupported()) this.getCommand(refCommand).setTabCompleter(this);
 
+            org.bukkit.command.PluginCommand baltopCmd = this.getCommand("baltop");
+            if (baltopCmd != null) {
+                baltopCmd.setExecutor(new com.massivecraft.factions.cmd.baltop.BalTopCommand());
+            }
+
 
             this.postEnable();
             this.loadSuccessful = true;
-            // Set startup finished to true. to give plugins hooking in a greenlight
             FactionsPlugin.startupFinished = true;
         });
     }
@@ -313,30 +308,43 @@ public class FactionsPlugin extends MPlugin {
     @Override
     public void onDisable() {
 
+        safeShutdown("ShutdownParameter", () -> ShutdownParameter.initShutdown(this));
+        safeShutdown("PlayerCacheManager", com.massivecraft.factions.util.PlayerCacheManager::clear);
+        safeShutdown("FTopCache",         () -> com.massivecraft.factions.cmd.ftop.FTopCache.getInstance().clear());
+        safeShutdown("BalTopCache",       () -> com.massivecraft.factions.cmd.baltop.BalTopCache.getInstance().clear());
 
-        ShutdownParameter.initShutdown(this);
+        safeShutdown("AutoLeaveTask", () -> {
+            if (this.AutoLeaveTask != null) {
+                getServer().getScheduler().cancelTask(this.AutoLeaveTask);
+                this.AutoLeaveTask = null;
+            }
+        });
 
-        // Drop the central Player cache; prevents holding references to
-        // stale Player instances across plugin reloads.
-        com.massivecraft.factions.util.PlayerCacheManager.clear();
+        safeShutdown("Audiences", () -> {
+            if (TextUtil.AUDIENCES != null) TextUtil.AUDIENCES.close();
+        });
 
-        // Cancel periodic /ftop refresh + drop cached heads / snapshot.
-        com.massivecraft.factions.cmd.ftop.FTopCache.getInstance().clear();
+        safeShutdown("FactionDataHelper", () -> {
+            if (this.factionDataHelper != null) {
+                this.factionDataHelper.saveAllCachedData();
+                this.factionDataHelper.shutdown();
+            }
+        });
 
-        if (this.AutoLeaveTask != null) {
-            getServer().getScheduler().cancelTask(this.AutoLeaveTask);
-            this.AutoLeaveTask = null;
+        try {
+            super.onDisable();
+        } catch (Throwable t) {
+            getLogger().log(java.util.logging.Level.SEVERE, "super.onDisable() failed", t);
         }
-        if (TextUtil.AUDIENCES != null) {
-            TextUtil.AUDIENCES.close();
-        }
+    }
 
-        if (this.factionDataHelper != null) {
-            this.factionDataHelper.saveAllCachedData();
-            this.factionDataHelper.shutdown();
+    private void safeShutdown(String label, Runnable r) {
+        try {
+            r.run();
+        } catch (Throwable t) {
+            getLogger().log(java.util.logging.Level.SEVERE,
+                    "Shutdown step '" + label + "' failed (jar may be corrupt or out of date)", t);
         }
-
-        super.onDisable();
     }
 
     public void startAutoLeaveTask(boolean restartIfRunning) {
@@ -378,14 +386,12 @@ public class FactionsPlugin extends MPlugin {
 
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, String[] args) {
-        // Must be a LinkedList to prevent UnsupportedOperationException.
         List<String> argsList = new LinkedList<>(Arrays.asList(args));
         CommandContext context = new CommandContext(sender, argsList, alias);
         List<FCommand> commandsList = cmdBase.getSubCommands();
         FCommand commandsEx = cmdBase;
         List<String> completions = new ArrayList<>();
 
-        // Handle empty first arg (spigot bug workaround)
         if (context.args.get(0).isEmpty()) {
             for (FCommand subCommand : commandsEx.getSubCommands()) {
                 if (subCommand.getRequirements().isPlayerOnly()
@@ -397,7 +403,6 @@ public class FactionsPlugin extends MPlugin {
             return completions;
         }
 
-        // Handle first argument = subcommand
         if (context.args.size() == 1) {
             for (; !commandsList.isEmpty() && !context.args.isEmpty(); context.args.remove(0)) {
                 String cmdName = context.args.get(0).toLowerCase();
@@ -422,11 +427,9 @@ public class FactionsPlugin extends MPlugin {
                     .collect(Collectors.toList());
         }
 
-        // Handle further arguments
         String lastArgName = args.length >= 2 ? args[args.length - 2].toLowerCase() : "";
         String currentArg = args[args.length - 1].toLowerCase();
 
-        // Check for common player argument keywords
         if (lastArgName.equals("player")
                 || lastArgName.equals("target")
                 || lastArgName.equals("name")
@@ -440,7 +443,6 @@ public class FactionsPlugin extends MPlugin {
             return completions;
         }
 
-        // Default completions
         for (Role value : Role.VALUES) completions.add(value.nicename);
         for (Relation value : Relation.VALUES) completions.add(value.nicename);
         for (Player player : Bukkit.getServer().getOnlinePlayers()) completions.add(player.getName());
@@ -452,11 +454,6 @@ public class FactionsPlugin extends MPlugin {
                 .collect(Collectors.toList());
     }
 
-    // -------------------------------------------- //
-    // Functions for other plugins to hook into
-    // -------------------------------------------- //
-
-    // If another plugin is handling insertion of chat tags, this should be used to notify Factions
     public void handleFactionTagExternally(boolean notByFactions) {
         Conf.chatTagHandledByAnotherPlugin = notByFactions;
     }

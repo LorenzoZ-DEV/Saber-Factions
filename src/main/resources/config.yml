@@ -49,8 +49,89 @@ portals:
 # Warps
 # What should be the max amount of warps that a Faction can set?
 max-warps: 5
+
+## FTop
+# This is the configuration for FTop, which is a GUI that shows the top factions based on criteria.
+
 ftop:
   refresh-interval-seconds: 300
+
+ftop-gui:
+  name: "&8&lFactions Top"
+
+  border-item:
+    Type: GRAY_STAINED_GLASS_PANE
+    Name: ' '
+
+  faction-item:
+    Type: PAPER
+    Name: '&e#{rank} &6{faction}'
+    Lore:
+      - '&7Members: &f{members}'
+      - '&7Balance: &a${balance}'
+      - '&7Power: &f{power}'
+
+  own-head-item:
+    Name: '&6{faction}'
+    Lore:
+      - '&7Position: &e#{rank}'
+      - '&7Balance: &a${balance}'
+      - '&7Members: &f{members}'
+      - '&7Power: &f{power}'
+
+  no-faction-head-item:
+    Name: '&c&lYou are not in a faction'
+    Lore:
+      - '&eUse &f/f create <nome> &eto create a faction,'
+      - '&eor use &f/f join <nome> &eto join an existing faction.'
+  prev-item:
+    Type: ARROW
+    Name: '&c« Back'
+    Lore:
+      - '&7Page {page}'
+  next-item:
+    Type: ARROW
+    Name: '&aNext »'
+    Lore:
+      - '&7Page {page}'
+
+## BalTop
+baltop:
+  refresh-interval-seconds: 300
+  gui-refresh-seconds: 30
+  max-entries: 100
+
+baltop-gui:
+  name: "&8&lBaltop"
+  border-item:
+    Type: GRAY_STAINED_GLASS_PANE
+    Name: ' '
+  player-item:
+    Type: PLAYER_HEAD
+    Name: '&f#{rank} &6{name}'
+    Lore:
+      - '&7Balance: &a${balance}'
+  own-head-item:
+    Type: PLAYER_HEAD
+    Name: '&f#{rank} &e{name} &7(tu)'
+    Lore:
+      - '&7Balance: &a${balance}'
+  self-head-item:
+    Name: '&6{name}'
+    Lore:
+      - '&7Position: &e#{rank}'
+      - '&7Balance: &a${balance}'
+  prev-item:
+    Type: ARROW
+    Name: '&c« Back'
+    Lore:
+      - '&7Page {page}'
+  next-item:
+    Type: ARROW
+    Name: '&aNext »'
+    Lore:
+      - '&7Page {page}'
+
 # This is the cost section for warps.
 # It will charge them each time the command would be successful. (won't charge on erroneous /f warp attempts).
 # You can use decimal places here.
@@ -159,7 +240,9 @@ scoreboard:
   ######################################################
   default-enabled: true # This is to enable or disable the scoreboard: true = Enabled
   default-title: "&cSaberFactions" # Can use any of the values from above but this won't update once it's set (so don't set {balance}).
-  default-update-interval: 2 # in seconds.
+  # Title shown when the player is NOT in a faction (factionless). Falls back to default-title if not set.
+  factionless-title: "&cSaberFactions"
+  default-update-interval: 1 # in seconds. 0 = default (1s).
   # This will show faction prefixes colored based on relation on name-tags and in the tab.
   #   The scoreboard needs to be enabled for this to work.
   default-prefixes: true
@@ -453,6 +536,47 @@ fwarp-gui:
     Name: ' '
     Lore:
       - ' '
+
+############################################################
+# +------------------------------------------------------+ #
+# |                       Chat                           | #
+# +------------------------------------------------------+ #
+############################################################
+# Configurable chat formats. Use %1$s for the player name and %2$s for the message.
+# Color codes (&) are supported.
+# Set "enabled: false" or leave format empty to disable each override and fall back to default behaviour.
+chat:
+  # Format applied to players who are NOT in any faction (factionless).
+  no-faction:
+    enabled: true
+    format: '&7[no-faction] %luckperms_prefix%&f%1$s &8» &f%2$s'
+  # Format applied to players who ARE in a faction speaking in public chat.
+  # %1$s = player display name, %2$s = message. PAPI placeholders supported.
+  # Set "enabled: false" or leave format empty to fall back to the legacy chat-tag insertion.
+  public:
+    enabled: true
+    format: '%luckperms_prefix%&f%1$s &8» &f%2$s'
+  # Format used for /f c f (faction-only chat). %1$s = player name (with relation color),
+  # %2$s = message. PAPI placeholders supported.
+  faction:
+    format: '&2[FactionChat] &a%1$s&7: &f%2$s'
+  # Format used for /f c a (alliance chat).
+  alliance:
+    format: '&d[AllianceChat] &a%1$s&7: &f%2$s'
+  # Format used for /f c t (truce chat).
+  truce:
+    format: '&5[TruceChat] &a%1$s&7: &f%2$s'
+  # Format used for /f c m (faction moderator chat).
+  mod:
+    format: '&c[ModChat] %1$s&7: &f%2$s'
+  # Allow players to use legacy color codes (&a, &c, ...) in their chat messages
+  # if they have the permission node "factions.chat.color" (ops have it by default).
+  allow-color-codes:
+    enabled: true
+    permission: 'factions.chat.color'
+    # Allow magic/format codes (&k &l &m &n &o). If false, only color codes (0-9 a-f) and reset (&r) are translated.
+    allow-format-codes: true
+
 ############################################################
 # +------------------------------------------------------+ #
 # |                  Faction Broadcasts                  | #

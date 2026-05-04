@@ -58,6 +58,10 @@ public class Econ {
         return econ != null;
     }
 
+    public static Economy getEconomy() {
+        return econ;
+    }
+
     public static void modifyUniverseMoney(double delta) {
         if (!shouldBeUsed()) return;
         if (Conf.econUniverseAccount == null) return;

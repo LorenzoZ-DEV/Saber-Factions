@@ -17,10 +17,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class FTeamWrapper {
 
-    /**
-     * @author FactionsUUID Team - Modified By CmdrKittens
-     */
-
     private static final Map<Faction, FTeamWrapper> wrappers = new ConcurrentHashMap<>();
     private static final Set<FScoreboard> tracking = ConcurrentHashMap.newKeySet();
     private static final Set<Faction> updating = ConcurrentHashMap.newKeySet();
@@ -40,30 +36,10 @@ public class FTeamWrapper {
         }
     }
 
-    // --- cached config flags (re-evaluated at most every 20s, refreshed lazily
-    //     to stay in sync with /f reload without hitting YAML in hot path) ---
-    private static volatile long cachedConfigAt = 0L;
-    private static volatile boolean cachedDefaultPrefixes = false;
-    private static volatile boolean cachedSeeInvisible = false;
-    private static volatile boolean cachedFocusEnabled = false;
-    private static volatile String cachedFocusPrefix = "";
-    private static volatile String cachedDefaultPrefixTemplate = "";
-
-    private static void refreshConfigCacheIfStale() {
-        long now = System.currentTimeMillis();
-        if (now - cachedConfigAt <= 20_000L) return;
-        FileConfiguration c = FactionsPlugin.getInstance().getConfig();
-        cachedDefaultPrefixes = c.getBoolean("scoreboard.default-prefixes", false);
-        cachedSeeInvisible    = c.getBoolean("See-Invisible-Faction-Members", false);
-        cachedFocusEnabled    = c.getBoolean("ffocus.Enabled", false);
-        cachedFocusPrefix     = TextUtil.parse(c.getString("ffocus.Prefix", "&7»&b"));
-        cachedDefaultPrefixTemplate = TL.DEFAULT_PREFIX.toString();
-        cachedConfigAt        = now;
-    }
-
     private static boolean defaultPrefixesEnabled() {
-        refreshConfigCacheIfStale();
-        return cachedDefaultPrefixes && !cachedSeeInvisible;
+        FileConfiguration c = FactionsPlugin.getInstance().getConfig();
+        return c.getBoolean("scoreboard.default-prefixes", false)
+                && !c.getBoolean("See-Invisible-Faction-Members", false);
     }
 
     public static void applyUpdatesLater(final Faction faction) {
@@ -85,7 +61,6 @@ public class FTeamWrapper {
         if (!defaultPrefixesEnabled()) return;
         if (updating.contains(faction)) return;
 
-        // Remove wrapper if the faction was disbanded.
         if (Factions.getInstance().getFactionById(faction.getId()) == null) {
             FTeamWrapper removed = wrappers.remove(faction);
             if (removed != null) removed.unregister();
@@ -95,7 +70,6 @@ public class FTeamWrapper {
         FTeamWrapper wrapper = wrappers.computeIfAbsent(faction, FTeamWrapper::new);
         Set<FPlayer> factionMembers = faction.getFPlayers();
 
-        // Drop offline / ex-members (snapshot to avoid CME).
         for (OfflinePlayer player : wrapper.members.toArray(new OfflinePlayer[0])) {
             if (!player.isOnline() || !factionMembers.contains(FPlayers.getInstance().getByOfflinePlayer(player))) {
                 wrapper.removePlayer(player);
@@ -132,12 +106,16 @@ public class FTeamWrapper {
         for (FTeamWrapper wrapper : wrappers.values()) wrapper.remove(fboard);
     }
 
+    @SuppressWarnings("deprecation")
     private void add(FScoreboard fboard) {
         Scoreboard board = fboard.getScoreboard();
         if (board == null) return;
         teams.computeIfAbsent(fboard, k -> {
-            Team team = board.registerNewTeam(teamName);
-            for (OfflinePlayer player : members) team.addPlayer(player);
+            Team existing = board.getTeam(teamName);
+            Team team = existing != null ? existing : board.registerNewTeam(teamName);
+            for (OfflinePlayer player : members) {
+                try { team.addPlayer(player); } catch (IllegalArgumentException ignored) {}
+            }
             return team;
         });
         updatePrefix(fboard);
@@ -145,9 +123,11 @@ public class FTeamWrapper {
 
     private void remove(FScoreboard fboard) {
         Team team = teams.remove(fboard);
-        if (team != null) {
-            try { team.unregister(); } catch (IllegalStateException ignored) {}
+        if (team == null) return;
+        for (Team other : teams.values()) {
+            if (other == team) return;
         }
+        try { team.unregister(); } catch (IllegalStateException ignored) {}
     }
 
     private void updatePrefixes() {
@@ -156,24 +136,27 @@ public class FTeamWrapper {
     }
 
     private void updatePrefix(FScoreboard fboard) {
-        if (!defaultPrefixesEnabled()) return;
+        FileConfiguration c = FactionsPlugin.getInstance().getConfig();
+        boolean enabled = c.getBoolean("scoreboard.default-prefixes", false)
+                && !c.getBoolean("See-Invisible-Faction-Members", false);
+        if (!enabled) return;
 
         FPlayer fplayer = fboard.getFPlayer();
         Team team = teams.get(fboard);
         if (team == null) return;
 
-        // Cached config values (refreshed by defaultPrefixesEnabled()).
-        if (cachedSeeInvisible) {
+        if (c.getBoolean("See-Invisible-Faction-Members", false)) {
             team.setCanSeeFriendlyInvisibles(true);
         }
 
         boolean focused = false;
-        if (cachedFocusEnabled && fplayer.getFaction() != null
+        if (c.getBoolean("ffocus.Enabled", false) && fplayer.getFaction() != null
                 && fplayer.getFaction().getFocused() != null) {
             String focusedName = fplayer.getFaction().getFocused();
+            String focusPrefix = TextUtil.parse(c.getString("ffocus.Prefix", "&7\u00BB&b"));
             for (FPlayer fp : faction.getFPlayersWhereOnline(true)) {
                 if (focusedName.equalsIgnoreCase(fp.getName())) {
-                    if (!cachedFocusPrefix.equals(team.getPrefix())) team.setPrefix(cachedFocusPrefix);
+                    if (!focusPrefix.equals(team.getPrefix())) team.setPrefix(focusPrefix);
                     focused = true;
                     break;
                 }
@@ -181,7 +164,7 @@ public class FTeamWrapper {
         }
 
         if (!focused) {
-            String prefix = cachedDefaultPrefixTemplate;
+            String prefix = TL.DEFAULT_PREFIX.toString();
             prefix = PlaceholderAPI.setPlaceholders(fplayer.getPlayer(), prefix);
             prefix = PlaceholderAPI.setBracketPlaceholders(fplayer.getPlayer(), prefix);
             prefix = prefix.replace("{relationcolor}", faction.getRelationTo(fplayer).getColor().toString());
@@ -195,12 +178,14 @@ public class FTeamWrapper {
         }
     }
 
+    @SuppressWarnings("deprecation")
     private void addPlayer(OfflinePlayer player) {
         if (members.add(player)) {
             for (Team team : teams.values()) team.addPlayer(player);
         }
     }
 
+    @SuppressWarnings("deprecation")
     private void removePlayer(OfflinePlayer player) {
         if (members.remove(player)) {
             for (Team team : teams.values()) team.removePlayer(player);
@@ -208,7 +193,8 @@ public class FTeamWrapper {
     }
 
     private void unregister() {
-        for (Team team : teams.values()) {
+        java.util.HashSet<Team> uniq = new java.util.HashSet<>(teams.values());
+        for (Team team : uniq) {
             try { team.unregister(); } catch (IllegalStateException ignored) {}
         }
         teams.clear();

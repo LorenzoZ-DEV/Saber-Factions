@@ -117,7 +117,7 @@ public abstract class MemoryFPlayer implements FPlayer {
         this.powerBoost = 0.0;
         this.getKills();
         this.getDeaths();
-        this.showScoreboard = FactionsPlugin.getInstance().getConfig().getBoolean("scoreboard.default-enabled", false);
+        this.showScoreboard = FactionsPlugin.getInstance().getConfig().getBoolean("scoreboard.default-enabled", true);
         this.mapHeight = Conf.mapHeight;
         this.notificationsEnabled = true;
 

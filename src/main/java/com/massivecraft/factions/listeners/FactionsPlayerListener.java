@@ -47,11 +47,7 @@ import java.util.*;
 public class FactionsPlayerListener implements Listener {
 
     public static Set<FLocation> corners;
-    /**
-     * @author FactionsUUID Team - Modified By CmdrKittens
-     */
 
-    // Holds the next time a player can have a map shown.
     private final HashMap<UUID, Long> showTimes = new HashMap<>();
 
     public FactionsPlayerListener() {
@@ -105,7 +101,6 @@ public class FactionsPlayerListener implements Listener {
         Faction otherFaction = Board.getInstance().getFactionAt(loc);
         Faction myFaction = me.getFaction();
 
-        // Also cancel if player doesn't have ownership rights for this claim
         if (Conf.ownedAreasEnabled && myFaction == otherFaction && !myFaction.playerHasOwnershipRights(me, loc)) {
             if (!justCheck) {
                 me.msg(TextUtil.replace(TL.ACTIONS_OWNEDTERRITORYDENY.toString(), "{owners}", myFaction.getOwnerListString(loc)));
@@ -114,20 +109,18 @@ public class FactionsPlayerListener implements Listener {
         }
 
 
-        //if (me.getFaction() == otherFaction) return true;
-
         if (FactionsPlugin.getInstance().getConfig().getBoolean("hcf.raidable", false) && otherFaction.getLandRounded() > otherFaction.getPowerRounded()) {
             return true;
         }
 
 
         if (!Conf.territoryDenyUsageMaterials.contains(material)) {
-            return true; // Item isn't one we're preventing for online factions.
+            return true;
         }
 
         if (otherFaction.isWilderness()) {
             if (!Conf.wildernessDenyUsage || ((Conf.worldsNoWildernessProtection.contains(location.getWorld().getName()) && !Conf.useWorldConfigurationsAsWhitelist) || (!Conf.worldsNoWildernessProtection.contains(location.getWorld().getName()) && Conf.useWorldConfigurationsAsWhitelist))) {
-                return true; // This is not faction territory. Use whatever you like here.
+                return true;
             }
 
             if (!justCheck) {
@@ -158,7 +151,6 @@ public class FactionsPlayerListener implements Listener {
         }
 
         Relation rel = myFaction.getRelationTo(otherFaction);
-        // Cancel if we are not in our own territory
         if (rel.confDenyUseage()) {
             if (!justCheck) {
                 me.msg(TL.PLAYER_USE_TERRITORY, TextUtil.getMaterialName(material), otherFaction.getTag(myFaction));
@@ -177,12 +169,10 @@ public class FactionsPlayerListener implements Listener {
         FPlayer me = FPlayers.getInstance().getByPlayer(player);
         if (me.isAdminBypassing())
             return true;
-        // Dupe fix.
         FLocation loc = FLocation.wrap(block);
         Faction otherFaction = Board.getInstance().getFactionAt(loc);
         Faction myFaction = me.getFaction();
 
-        // no door/chest/whatever protection in wilderness, war zones, or safe zones
         if (otherFaction.isSystemFaction()) return true;
         if (myFaction.isWilderness()) {
             if (block.getType().name().contains("PLATE")) {
@@ -203,21 +193,8 @@ public class FactionsPlayerListener implements Listener {
         if (otherFaction.getId().equals(myFaction.getId()) && me.getRole() == Role.LEADER) return true;
         PermissableAction action = GetPermissionFromUsableBlock(block);
         if (action == null) return false;
-        // We only care about some material types.
-        /// Who was the idiot?
-        //if (otherFaction.hasPlayersOnline()) {
-        //    if (Conf.territoryProtectedMaterials.contains(material)) {
-        //        return false;
-        //    }
-        //} else {
-        //    if (Conf.territoryProtectedMaterialsWhenOffline.contains(material)) {
-        //        return false;
-        //    }
-        //}
 
-        // Move up access check to check for exceptions
-        if (!otherFaction.getId().equals(myFaction.getId())) { // If the faction target is not my own
-            // Get faction pain build access relation to me
+        if (!otherFaction.getId().equals(myFaction.getId())) {
             boolean pain = !justCheck && otherFaction.getAccess(me, PermissableAction.PAIN_BUILD) == Access.ALLOW;
             return CheckPlayerAccess(player, me, loc, otherFaction, otherFaction.getAccess(me, action), action, pain);
         } else if (otherFaction.getId().equals(myFaction.getId())) {
@@ -235,7 +212,7 @@ public class FactionsPlayerListener implements Listener {
 
         FPlayer me = FPlayers.getInstance().getByPlayer(player);
 
-        String shortCmd;  // command without the slash at the beginning
+        String shortCmd;
         if (fullCmd.startsWith("/")) {
             shortCmd = fullCmd.substring(1);
         } else {
@@ -300,7 +277,7 @@ public class FactionsPlayerListener implements Listener {
     }
 
     private static boolean CheckPlayerAccess(Player player, FPlayer me, FLocation loc, Faction factionToCheck, Access access, PermissableAction action, boolean pain) {
-        boolean doPain = pain || Conf.handleExploitInteractionSpam; // Painbuild should take priority. But we want to use exploit interaction as well.
+        boolean doPain = pain || Conf.handleExploitInteractionSpam;
         if (access != null) {
             boolean landOwned = (factionToCheck.doesLocationHaveOwnersSet(loc) && !factionToCheck.getOwnerList(loc).isEmpty());
             if ((landOwned && factionToCheck.getOwnerListString(loc).contains(player.getName())) || (me.getRole() == Role.LEADER && me.getFactionId().equals(factionToCheck.getId()))) {
@@ -317,7 +294,6 @@ public class FactionsPlayerListener implements Listener {
             }
         }
 
-        // Approves any permission check if the player in question is a leader AND owns the faction.
         if (me.getRole().equals(Role.LEADER) && me.getFaction().equals(factionToCheck)) return true;
         if (factionToCheck != null) {
             me.msg(TL.PLAYER_USE_TERRITORY, action, factionToCheck.getTag(me.getFaction()));
@@ -325,9 +301,6 @@ public class FactionsPlayerListener implements Listener {
         return false;
     }
 
-    /// <summary>
-    /// This will try to resolve a permission action based on the item material, if it's not usable, will return null
-    /// </summary>
     private static PermissableAction GetPermissionFromUsableBlock(Block block) {
         return GetPermissionFromUsableBlock(block.getType());
     }
@@ -374,31 +347,36 @@ public class FactionsPlayerListener implements Listener {
         }
     }
 
-    @EventHandler(priority = EventPriority.NORMAL)
+    @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerJoin(PlayerJoinEvent event) {
         initPlayer(event.getPlayer());
     }
 
     private void initPlayer(Player player) {
-        // Make sure that all online players do have a fplayer.
         FPlayer me = FPlayers.getInstance().getByPlayer(player);
         ((MemoryFPlayer) me).setName(player.getName());
 
-        // Update the lastLoginTime for this fplayer
         me.setLastLoginTime(System.currentTimeMillis());
 
-        // Store player's current FLocation and notify them where they are
         me.setLastStoodAt(FLocation.wrap(player.getLocation()));
 
-        me.login(); // set kills / deaths
+        me.login();
 
         Bukkit.getScheduler().runTaskLater(FactionsPlugin.instance, () -> {
             if (me.isOnline()) me.getFaction().sendUnreadAnnouncements(me);
         }, 33L);
 
-        if (FactionsPlugin.instance.getConfig().getBoolean("scoreboard.default-enabled", false)) {
-            FScoreboard.init(me);
-            FScoreboard.get(me).setDefaultSidebar(new FDefaultSidebar());
+        if (FactionsPlugin.instance.getConfig().getBoolean("scoreboard.default-enabled", true)) {
+            Bukkit.getScheduler().runTaskLater(FactionsPlugin.instance, () -> {
+                if (!me.isOnline()) return;
+                FScoreboard.init(me);
+                FScoreboard board = FScoreboard.get(me);
+                if (board != null) {
+                    board.setDefaultSidebar(new FDefaultSidebar());
+                    board.setSidebarVisibility(true);
+                    me.setShowScoreboard(true);
+                }
+            }, 20L);
         }
 
         Faction myFaction = me.getFaction();
@@ -431,17 +409,14 @@ public class FactionsPlayerListener implements Listener {
         Player player = event.getPlayer();
         FPlayer me = FPlayers.getInstance().getByPlayer(player);
 
-        // and update their last login time to point to when the logged off, for auto-remove routine
         me.setLastLoginTime(System.currentTimeMillis());
 
-        //Purposeful for Roster Feature.
         me.setLastLogoutTime(System.currentTimeMillis());
 
-        me.logout(player.getStatistic(Statistic.PLAYER_KILLS), player.getStatistic(Statistic.DEATHS)); // cache kills / deaths
+        me.logout(player.getStatistic(Statistic.PLAYER_KILLS), player.getStatistic(Statistic.DEATHS));
 
         CmdSeeChunk.seeChunkMap.remove(me.getPlayer().getName());
 
-        // if player is waiting for fstuck teleport but leaves, remove
         Integer stuck = FactionsPlugin.getInstance().getStuckMap().remove(player.getUniqueId());
 
         if (stuck != null) {
@@ -480,13 +455,12 @@ public class FactionsPlayerListener implements Listener {
 
         VisualizeUtil.clear(event.getPlayer());
 
-        // Did we change coord?
         FLocation from = me.getLastStoodAt();
         FLocation to = FLocation.wrap(event.getTo());
 
         me.setLastStoodAt(to);
 
-        if (player.getGameMode() != GameMode.SPECTATOR) { //To Disable Roam Plugins w/AutoClaim On
+        if (player.getGameMode() != GameMode.SPECTATOR) {
             if (me.getAutoClaimFor() != null) {
                 me.attemptClaim(me.getAutoClaimFor(), to, true);
             } else if (me.getAutoUnclaimFor() != null) {
@@ -494,7 +468,6 @@ public class FactionsPlayerListener implements Listener {
             }
         }
 
-        // Did we change "host"(faction)?
         Faction factionFrom = Board.getInstance().getFactionAt(from);
         Faction factionTo = Board.getInstance().getFactionAt(to);
         boolean changedFaction = (factionFrom != factionTo);
@@ -538,7 +511,6 @@ public class FactionsPlayerListener implements Listener {
         }
     }
 
-    //For disabling enderpearl throws
     @EventHandler
     public void onPearl(PlayerInteractEvent e) {
         Player player = e.getPlayer();
@@ -567,39 +539,30 @@ public class FactionsPlayerListener implements Listener {
             type = null;
         }
 
-        // Allow creeper egging chests
         if (Conf.allowCreeperEggingChests && (block.getType() == XMaterial.CHEST.parseMaterial() || block.getType() == XMaterial.TRAPPED_CHEST.parseMaterial()) && type == XMaterial.CREEPER_SPAWN_EGG.parseMaterial() && event.getPlayer().isSneaking())
             return;
 
-        // Allow interaction with blocks that bypass protection
         if (Conf.territoryBypassProtectedMaterials.contains(block.getType()))
             return;
 
-        // Check if the block is interactable (doors, chests, etc.)
         boolean isInteractableBlock = GetPermissionFromUsableBlock(block.getType()) != null;
 
-        // Handle block interactions (doors, chests, etc.)
         if (isInteractableBlock && !canPlayerUseBlock(player, block, false)) {
             event.setCancelled(true);
             event.setUseInteractedBlock(Event.Result.DENY);
             return;
         }
 
-        // Handle item usage - only cancel item usage, not block interaction
         if (type != null && !playerCanUseItemHere(player, block.getLocation(), event.getItem().getType(), false, PermissableAction.ITEM)) {
             if (Conf.territoryCancelAndAllowItemUseMaterial.contains(type)) {
-                // If the block is interactable, prevent that interaction,
-                // but still allow the item to be used (like eating, potions, etc.)
                 if (isInteractableBlock || Conf.territoryDenySwitchMaterials.contains(block.getType())) {
                     event.setUseInteractedBlock(Event.Result.DENY);
                 }
 
-                // Ensure item use is allowed
                 event.setUseItemInHand(Event.Result.ALLOW);
                 return;
             }
 
-            // Fully block item use and block interaction
             event.setCancelled(true);
             event.setUseInteractedBlock(Event.Result.DENY);
             event.setUseItemInHand(Event.Result.DENY);
@@ -634,7 +597,7 @@ public class FactionsPlayerListener implements Listener {
     public void onPlayerRespawn(PlayerRespawnEvent event) {
         FPlayer me = FPlayers.getInstance().getByPlayer(event.getPlayer());
 
-        me.getPower();  // update power, so they won't have gained any while dead
+        me.getPower();
 
         Location home = me.getFaction().getHome();
         if (Conf.homesEnabled &&
@@ -645,8 +608,6 @@ public class FactionsPlayerListener implements Listener {
         }
     }
 
-    // For some reason onPlayerInteract() sometimes misses bucket events depending on distance (something like 2-3 blocks away isn't detected),
-    // but these separate bucket events below always fire without fail
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onPlayerBucketEmpty(PlayerBucketEmptyEvent event) {
         Block block = event.getBlockClicked();
@@ -687,7 +648,6 @@ public class FactionsPlayerListener implements Listener {
         FLocation to = FLocation.wrap(Objects.requireNonNull(event.getTo()));
         me.setLastStoodAt(to);
 
-        // Check the location they're teleporting to and check if they can fly there.
         if (FCmdRoot.instance.fFlyEnabled && !me.isAdminBypassing()) {
             boolean canFly = me.canFlyAtLocation(to);
             if (me.isFlying() && !canFly) {
@@ -737,7 +697,6 @@ public class FactionsPlayerListener implements Listener {
         FPlayer badGuy = FPlayers.getInstance().getByPlayer(event.getPlayer());
         if (badGuy == null) return;
 
-        // if player was banned (not just kicked), get rid of their stored info
         if (Conf.removePlayerDataWhenBanned && event.getReason().equals(Conf.removePlayerDataWhenBannedReason)) {
             if (badGuy.getRole() == Role.LEADER) badGuy.getFaction().promoteNewLeader();
             badGuy.leave(false);

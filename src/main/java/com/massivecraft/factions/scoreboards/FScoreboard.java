@@ -4,75 +4,69 @@ import com.massivecraft.factions.FPlayer;
 import com.massivecraft.factions.FPlayers;
 import com.massivecraft.factions.FactionsPlugin;
 import com.massivecraft.factions.zcore.util.TextUtil;
-import fr.mrmicky.fastboard.FastBoard;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
+import org.bukkit.scoreboard.DisplaySlot;
+import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.ScoreboardManager;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.logging.Level;
 
-/**
- * Packet-based sidebar wrapper built on top of FastBoard.
- * Single global tick task drives all players at {@value #UPDATE_PERIOD_TICKS} tick intervals.
- */
 public class FScoreboard {
 
-    /** Hard limit imposed by the vanilla scoreboard protocol. */
     public static final int MAX_LINES = 15;
-
-    /** Minimum ticks between two consecutive sidebar updates. */
-    private static final long UPDATE_PERIOD_TICKS = 10L;
+    private static final int MAX_LINE_LENGTH = 128;
+    private static final int MAX_TITLE_LENGTH = 128;
+    private static final long DEFAULT_UPDATE_PERIOD_TICKS = 20L;
+    private static final String OBJECTIVE_NAME = "f_sb";
 
     private static final Map<FPlayer, FScoreboard> fscoreboards = new ConcurrentHashMap<>();
-    private static final AtomicLong TICK_COUNTER = new AtomicLong();
     private static volatile BukkitTask updateTask;
 
-    private final Scoreboard scoreboard;
     private final FPlayer fplayer;
-    private final FastBoard fastBoard; // created once, never recreated
+    private volatile Scoreboard scoreboard;
+    private volatile Objective objective;
 
     private volatile FSidebarProvider defaultProvider;
     private volatile FSidebarProvider temporaryProvider;
-    private volatile long temporaryExpireTick = -1L;
+    private volatile long temporaryExpireAt = -1L;
     private volatile boolean sidebarVisible = true;
     private volatile boolean removed = false;
 
-    // Cache of the last successfully applied frame; lets us short-circuit when
-    // nothing changed, cutting both allocations and packets.
-    private volatile String lastAppliedTitle = "";
-    private volatile List<String> lastAppliedLines = Collections.emptyList();
+    private volatile List<String> lastLines = Collections.emptyList();
+    private volatile String lastTitle = null;
 
     private FScoreboard(FPlayer fplayer) {
         this.fplayer = fplayer;
 
         Player player = fplayer.getPlayer();
-        if (isSupportedByServer() && player != null) {
-            this.scoreboard = Bukkit.getScoreboardManager().getNewScoreboard();
-            // Keep the Bukkit scoreboard attached so FTeamWrapper can register
-            // teams for faction tag prefixes. FastBoard works via packets so
-            // it does not conflict.
-            player.setScoreboard(scoreboard);
-            // Objective + all 15 team slots are allocated once here.
-            this.fastBoard = new FastBoard(player);
-            this.fastBoard.updateTitle(" ");
-        } else {
-            this.scoreboard = null;
-            this.fastBoard = null;
+        if (player != null && player.isOnline()) {
+            try {
+                ensureBoard0(player);
+            } catch (Throwable ex) {
+                FactionsPlugin.getInstance().getLogger().log(Level.SEVERE,
+                        "[FScoreboard] failed to create Bukkit scoreboard for " + player.getName(), ex);
+                this.scoreboard = null;
+                this.objective = null;
+            }
         }
     }
 
-    // Glowstone doesn't support scoreboards.
     public static boolean isSupportedByServer() {
         return Bukkit.getScoreboardManager() != null;
     }
 
     public static void init(FPlayer fplayer) {
+        if (fplayer == null || fplayer.getPlayer() == null) return;
+
         FScoreboard fboard = fscoreboards.computeIfAbsent(fplayer, FScoreboard::new);
 
         if (fplayer.hasFaction()) {
@@ -87,13 +81,17 @@ public class FScoreboard {
         if (fboard == null) return;
 
         fboard.removed = true;
-        if (Bukkit.getScoreboardManager() != null && fboard.scoreboard != null
-                && fboard.scoreboard == player.getScoreboard()) {
-            player.setScoreboard(Bukkit.getScoreboardManager().getMainScoreboard());
+
+        Player p = player != null ? player : fplayer.getPlayer();
+        if (p != null && p.isOnline()) {
+            try {
+                ScoreboardManager mgr = Bukkit.getScoreboardManager();
+                if (mgr != null) p.setScoreboard(mgr.getMainScoreboard());
+            } catch (Throwable ignored) {
+            }
         }
-        if (fboard.fastBoard != null && !fboard.fastBoard.isDeleted()) {
-            fboard.fastBoard.delete();
-        }
+        fboard.unregisterObjective();
+
         FTeamWrapper.untrack(fboard);
 
         if (fscoreboards.isEmpty()) stopUpdateTask();
@@ -107,17 +105,18 @@ public class FScoreboard {
         return fscoreboards.get(FPlayers.getInstance().getByPlayer(player));
     }
 
-    // ---------------- Global ticker ----------------
-
     private static void ensureUpdateTask() {
         if (updateTask != null) return;
         synchronized (FScoreboard.class) {
             if (updateTask != null) return;
+            int seconds = FactionsPlugin.getInstance().getConfig().getInt("scoreboard.default-update-interval", 0);
+            long period = seconds > 0 ? seconds * 20L : DEFAULT_UPDATE_PERIOD_TICKS;
             updateTask = Bukkit.getScheduler().runTaskTimer(
                     FactionsPlugin.getInstance(),
                     FScoreboard::tickAll,
-                    UPDATE_PERIOD_TICKS,
-                    UPDATE_PERIOD_TICKS);
+                    period,
+                    period
+            );
         }
     }
 
@@ -131,189 +130,255 @@ public class FScoreboard {
     }
 
     private static void tickAll() {
-        long tick = TICK_COUNTER.incrementAndGet();
-        for (FScoreboard board : fscoreboards.values()) {
-            board.tick(tick);
+        if (fscoreboards.isEmpty()) return;
+        long now = System.currentTimeMillis();
+        for (FScoreboard b : fscoreboards.values()) {
+            b.tick(now);
         }
     }
 
-    private void tick(long currentTick) {
-        if (removed || fastBoard == null) return;
+    private void tick(long now) {
+        if (removed) return;
+        if (!sidebarVisible) return;
+        if (defaultProvider == null && temporaryProvider == null) return;
 
-        // Expire the temporary provider without a dedicated Bukkit task.
-        if (temporaryProvider != null && currentTick >= temporaryExpireTick) {
+        Player player = fplayer.getPlayer();
+        if (player == null || !player.isOnline()) return;
+
+        if (temporaryProvider != null && now >= temporaryExpireAt) {
             temporaryProvider = null;
         }
+
         requestUpdate();
     }
 
-    // ---------------- Public API ----------------
-
     public void setSidebarVisibility(boolean visible) {
-        if (fastBoard == null) return;
         if (this.sidebarVisible == visible) return;
         this.sidebarVisible = visible;
+
         if (!visible) {
-            applyHidden();
+            unregisterObjective();
+            Player player = fplayer.getPlayer();
+            if (player != null && player.isOnline()) {
+                try {
+                    ScoreboardManager mgr = Bukkit.getScoreboardManager();
+                    if (mgr != null) player.setScoreboard(mgr.getMainScoreboard());
+                } catch (Throwable ignored) {
+                }
+            }
         } else {
             requestUpdate();
         }
     }
 
     public void setDefaultSidebar(final FSidebarProvider provider) {
-        if (fastBoard == null) return;
-        defaultProvider = provider;
+        this.defaultProvider = provider;
         if (temporaryProvider == null) requestUpdate();
     }
 
     public void setTemporarySidebar(final FSidebarProvider provider) {
-        if (fastBoard == null) return;
-        int seconds = cachedExpirationSeconds();
+        int seconds = FactionsPlugin.getInstance().getConfig().getInt("scoreboard.expiration", 7);
         temporaryProvider = provider;
-        // Convert seconds to ticker periods (ticker fires every UPDATE_PERIOD_TICKS).
-        long periods = Math.max(1L, (seconds * 20L) / UPDATE_PERIOD_TICKS);
-        temporaryExpireTick = TICK_COUNTER.get() + periods;
+        temporaryExpireAt = System.currentTimeMillis() + Math.max(1L, seconds) * 1000L;
         requestUpdate();
     }
 
-    // Cache of scoreboard.expiration — refreshed lazily every 20s to stay in
-    // sync with /f reload without paying a YAML lookup at every finfo.
-    private static volatile int cachedExpirationSeconds = -1;
-    private static volatile long cachedExpirationAt = 0L;
-
-    private static int cachedExpirationSeconds() {
-        long now = System.currentTimeMillis();
-        if (cachedExpirationSeconds < 0 || now - cachedExpirationAt > 20_000L) {
-            cachedExpirationSeconds = FactionsPlugin.getInstance().getConfig().getInt("scoreboard.expiration", 7);
-            cachedExpirationAt = now;
-        }
-        return cachedExpirationSeconds;
+    protected FPlayer getFPlayer() {
+        return fplayer;
     }
 
-    protected FPlayer getFPlayer() { return fplayer; }
+    protected Scoreboard getScoreboard() {
+        Scoreboard sb = scoreboard;
+        if (sb != null) return sb;
+        Player player = fplayer.getPlayer();
+        if (player == null) return null;
+        ensureBoard0(player);
+        return scoreboard;
+    }
 
-    protected Scoreboard getScoreboard() { return scoreboard; }
+    private synchronized void ensureBoard0(Player player) {
+        if (scoreboard != null) return;
+        ScoreboardManager mgr = Bukkit.getScoreboardManager();
+        if (mgr == null) return;
+        Scoreboard sb = mgr.getNewScoreboard();
+        this.scoreboard = sb;
+        try {
+            player.setScoreboard(sb);
+        } catch (Throwable ex) {
+            FactionsPlugin.getInstance().getLogger().log(Level.WARNING,
+                    "[FScoreboard] could not assign scoreboard to " + player.getName(), ex);
+        }
+    }
 
-    // ---------------- Update pipeline ----------------
+    private synchronized Objective ensureObjective() {
+        if (scoreboard == null) {
+            Player p = fplayer.getPlayer();
+            if (p != null) ensureBoard0(p);
+            if (scoreboard == null) return null;
+        }
+        Objective obj = objective;
+        if (obj != null) {
+            try {
+                if (scoreboard.getObjective(OBJECTIVE_NAME) == obj) return obj;
+            } catch (Throwable ignored) {
+            }
+        }
+        try {
+            Objective existing = scoreboard.getObjective(OBJECTIVE_NAME);
+            if (existing != null) {
+                this.objective = existing;
+                if (existing.getDisplaySlot() != DisplaySlot.SIDEBAR) {
+                    existing.setDisplaySlot(DisplaySlot.SIDEBAR);
+                }
+                return existing;
+            }
+            Objective fresh;
+            try {
+                fresh = scoreboard.registerNewObjective(OBJECTIVE_NAME, "dummy", " ");
+            } catch (NoSuchMethodError ex) {
+                fresh = scoreboard.registerNewObjective(OBJECTIVE_NAME, "dummy");
+            }
+            fresh.setDisplaySlot(DisplaySlot.SIDEBAR);
+            this.objective = fresh;
+            return fresh;
+        } catch (Throwable ex) {
+            FactionsPlugin.getInstance().getLogger().log(Level.WARNING,
+                    "[FScoreboard] could not (re)create objective for " + fplayer.getName(), ex);
+            this.objective = null;
+            return null;
+        }
+    }
+
+    private synchronized void unregisterObjective() {
+        Objective obj = objective;
+        if (obj != null) {
+            try { obj.unregister(); } catch (Throwable ignored) {}
+        }
+        this.objective = null;
+        this.lastLines = Collections.emptyList();
+        this.lastTitle = null;
+    }
 
     private void requestUpdate() {
-        if (fastBoard == null || fastBoard.isDeleted() || removed) return;
+        if (removed) return;
+
+        Player player = fplayer.getPlayer();
+        if (player == null || !player.isOnline()) return;
+
+        try {
+            if (scoreboard != null && player.getScoreboard() != scoreboard) {
+                player.setScoreboard(scoreboard);
+            }
+        } catch (Throwable ignored) {
+        }
 
         final FSidebarProvider provider = temporaryProvider != null ? temporaryProvider : defaultProvider;
         if (provider == null || !sidebarVisible) {
-            applyHidden();
+            unregisterObjective();
             return;
         }
 
+        Objective obj = ensureObjective();
+        if (obj == null) return;
+
         try {
-            Snapshot snapshot = renderSnapshot(provider);
-            applySnapshot(snapshot);
+            renderAndApply(obj, provider);
         } catch (Exception ex) {
-            FactionsPlugin.getInstance().getLogger().warning(
-                    "FScoreboard: render failed for " + fplayer.getName() + ": " + ex.getMessage());
+            FactionsPlugin.getInstance().getLogger().log(Level.WARNING,
+                    "[FScoreboard] render failed for " + fplayer.getName(), ex);
         }
     }
 
-    /** Builds the frame to apply. Runs on the main thread. */
-    private Snapshot renderSnapshot(FSidebarProvider provider) {
+    private static final String[] DUPE_SUFFIXES = {
+            "", "\u00A70", "\u00A71", "\u00A72", "\u00A73", "\u00A74", "\u00A75", "\u00A76",
+            "\u00A77", "\u00A78", "\u00A79", "\u00A7a", "\u00A7b", "\u00A7c", "\u00A7d", "\u00A7e", "\u00A7f"
+    };
+
+    private static String emptyPlaceholder(int index) {
+        char first = "0123456789abcdef".charAt(index & 0xF);
+        char second = "0123456789abcdef".charAt((index >> 4) & 0xF);
+        return "\u00A7" + first + "\u00A7" + second + "\u00A7r ";
+    }
+
+    private static boolean isVisuallyBlank(String s) {
+        if (s == null || s.isEmpty()) return true;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '\u00A7' && i + 1 < s.length()) {
+                i++;
+                continue;
+            }
+            if (!Character.isWhitespace(c)) return false;
+        }
+        return true;
+    }
+
+    private synchronized void renderAndApply(Objective obj, FSidebarProvider provider) {
         String title = provider.getTitle(fplayer);
         List<String> raw = provider.getLines(fplayer);
+        if (raw == null) raw = Collections.emptyList();
 
-        // Clamp to MAX_LINES, skip nulls, parse colors, sanitise for legacy
-        // (1.8-1.12) team prefix/suffix splitting done by FastBoard.
         int size = Math.min(raw.size(), MAX_LINES);
         ArrayList<String> parsed = new ArrayList<>(size);
+        HashSet<String> seen = new HashSet<>();
+        int blankCounter = 0;
         for (int i = 0; i < size; i++) {
             String line = raw.get(i);
-            parsed.add(sanitizeLine(line == null ? "" : TextUtil.parse(line)));
-        }
+            String parsedLine = line == null ? "" : TextUtil.parse(line);
 
-        String parsedTitle = title == null ? "" : TextUtil.parse(title);
-        return new Snapshot(parsedTitle, parsed);
-    }
-
-    /**
-     * Makes a single scoreboard line safe for FastBoard's legacy (1.8-1.12)
-     * renderer, which splits the line into a 16-char prefix + entry + 16-char
-     * suffix across scoreboard team slots. Several edge cases corrupt the split
-     * and trigger {@link StringIndexOutOfBoundsException} inside FastBoard; we
-     * normalise them upstream:
-     * <ol>
-     *     <li>Strip trailing dangling {@code §} (no colour code after it).</li>
-     *     <li>Hard-cap to 30 characters (the protocol limit is 32 with both
-     *         prefix + suffix; leaving some margin avoids off-by-one cases).</li>
-     *     <li>If character at index 15 is {@code §}, truncate right before it —
-     *         otherwise the prefix/suffix boundary lands on an orphan colour
-     *         byte and the split blows up.</li>
-     * </ol>
-     */
-    private static String sanitizeLine(String s) {
-        if (s == null || s.isEmpty()) return "";
-
-        s = stripTrailingColourChar(s);
-        if (s.length() > 30) s = stripTrailingColourChar(s.substring(0, 30));
-
-        if (s.length() > 16 && s.charAt(15) == org.bukkit.ChatColor.COLOR_CHAR) {
-            s = stripTrailingColourChar(s.substring(0, 15));
-        } else if (s.length() == 16 && s.charAt(15) == org.bukkit.ChatColor.COLOR_CHAR) {
-            s = s.substring(0, 15);
-        }
-        return s;
-    }
-
-    private static String stripTrailingColourChar(String s) {
-        int end = s.length();
-        while (end > 0 && s.charAt(end - 1) == org.bukkit.ChatColor.COLOR_CHAR) end--;
-        return end == s.length() ? s : s.substring(0, end);
-    }
-
-    /** Applies a rendered frame, skipping packets when nothing changed. */
-    private void applySnapshot(Snapshot snapshot) {
-        if (fastBoard == null || fastBoard.isDeleted() || removed) return;
-
-        // Title diff.
-        if (!snapshot.title.equals(lastAppliedTitle)) {
-            try {
-                fastBoard.updateTitle(snapshot.title);
-                lastAppliedTitle = snapshot.title;
-            } catch (RuntimeException ex) {
-                // Don't let a single bad title kill the global ticker.
-                FactionsPlugin.getInstance().getLogger().warning(
-                        "FScoreboard: failed to apply title '" + snapshot.title + "': " + ex.getMessage());
+            if (isVisuallyBlank(parsedLine)) {
+                parsedLine = emptyPlaceholder(blankCounter++);
             }
-        }
 
-        // Lines diff — equality check avoids the FastBoard call entirely when
-        // the provider produced the same content as last frame (common case).
-        if (!snapshot.lines.equals(lastAppliedLines)) {
-            try {
-                fastBoard.updateLines(snapshot.lines);
-                lastAppliedLines = snapshot.lines;
-            } catch (RuntimeException ex) {
-                // Most likely a legacy-split edge case in FastBoard itself. We
-                // already sanitise the lines upstream; still keep the ticker
-                // alive if something slips through.
-                FactionsPlugin.getInstance().getLogger().warning(
-                        "FScoreboard: failed to apply sidebar lines: " + ex.getMessage());
+            if (parsedLine.length() > MAX_LINE_LENGTH) {
+                parsedLine = parsedLine.substring(0, MAX_LINE_LENGTH);
             }
+            String unique = parsedLine;
+            int pad = 0;
+            while (!seen.add(unique) && pad < DUPE_SUFFIXES.length) {
+                unique = parsedLine + DUPE_SUFFIXES[pad++];
+                if (unique.length() > MAX_LINE_LENGTH) {
+                    unique = unique.substring(0, MAX_LINE_LENGTH);
+                }
+            }
+            parsed.add(unique);
         }
-    }
 
-    private void applyHidden() {
-        if (fastBoard == null || fastBoard.isDeleted() || removed) return;
-        if (lastAppliedLines.isEmpty()) return;
-        fastBoard.updateLines(Collections.emptyList());
-        lastAppliedLines = Collections.emptyList();
-    }
+        String parsedTitle = title == null ? " " : TextUtil.parse(title);
+        if (parsedTitle.length() > MAX_TITLE_LENGTH) parsedTitle = parsedTitle.substring(0, MAX_TITLE_LENGTH);
+        if (parsedTitle.isEmpty()) parsedTitle = " ";
 
-    /** Immutable rendered frame passed from the async render to the sync apply. */
-    private static final class Snapshot {
-        final String title;
-        final List<String> lines;
 
-        Snapshot(String title, List<String> lines) {
-            this.title = title;
-            this.lines = lines;
+        if (lastTitle == null || !lastTitle.equals(parsedTitle)) {
+            try {
+                obj.setDisplayName(parsedTitle);
+            } catch (Throwable ex) {
+                FactionsPlugin.getInstance().getLogger().log(Level.WARNING,
+                        "[FScoreboard] setDisplayName failed for " + fplayer.getName(), ex);
+            }
+            lastTitle = parsedTitle;
+        }
+
+        List<String> previous = lastLines;
+        if (!previous.equals(parsed)) {
+            HashSet<String> newSet = new HashSet<>(parsed);
+            for (String old : previous) {
+                if (!newSet.contains(old)) {
+                    try { scoreboard.resetScores(old); } catch (Throwable ignored) {}
+                }
+            }
+            int score = parsed.size();
+            for (String line : parsed) {
+                try {
+                    obj.getScore(line).setScore(score);
+                } catch (Throwable ex) {
+                    FactionsPlugin.getInstance().getLogger().log(Level.WARNING,
+                            "[FScoreboard] setScore failed for line '" + line + "'", ex);
+                }
+                score--;
+            }
+            lastLines = new ArrayList<>(parsed);
         }
     }
 }
+

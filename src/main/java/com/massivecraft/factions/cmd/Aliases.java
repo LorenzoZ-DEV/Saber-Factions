@@ -42,7 +42,7 @@ public class Aliases {
     public static ArrayList<String> money_transfer_Fp = new ArrayList<>(Collections.singletonList("fp"));
     public static ArrayList<String> money_transfer_Pf = new ArrayList<>(Collections.singletonList("pf"));
     public static ArrayList<String> money_withdraw = new ArrayList<>(Arrays.asList("w", "withdraw"));
-    public static ArrayList<String> grace = new ArrayList<>(Collections.singletonList("grace"));
+    public static ArrayList<String> grace = new ArrayList<>(Arrays.asList("grace", "graceperiod"));
     public static ArrayList<String> logout = new ArrayList<>(Collections.singletonList("logout"));
     public static ArrayList<String> rally = new ArrayList<>(Collections.singletonList("rally"));
     public static ArrayList<String> points_balance = new ArrayList<>(Arrays.asList("balance", "bal"));

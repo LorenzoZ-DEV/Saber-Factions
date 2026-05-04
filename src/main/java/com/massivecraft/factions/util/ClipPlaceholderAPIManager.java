@@ -25,7 +25,6 @@ public class ClipPlaceholderAPIManager extends PlaceholderExpansion implements R
         FactionsPlugin.getInstance().getLogger().log(Level.INFO, "Invalid request through PlaceholderAPI for placeholder '" + placeholder + "'");
     }
 
-    // Identifier for this expansion
     @Override
     public String getIdentifier() {
         return "factionsuuid";
@@ -36,7 +35,6 @@ public class ClipPlaceholderAPIManager extends PlaceholderExpansion implements R
         return "drtshock";
     }
 
-    // Return the plugin version since this expansion is bundled with the dependency
     @Override
     public String getVersion() {
         return FactionsPlugin.getInstance().getDescription().getVersion();
@@ -47,7 +45,6 @@ public class ClipPlaceholderAPIManager extends PlaceholderExpansion implements R
         return true;
     }
 
-    // Relational placeholders
     @Override
     public String onPlaceholderRequest(Player p1, Player p2, String placeholder) {
         if (p1 == null || p2 == null || placeholder == null) {
@@ -87,7 +84,6 @@ public class ClipPlaceholderAPIManager extends PlaceholderExpansion implements R
             placeholder = TextUtil.replace(placeholder, "_territory", "");
         }
         switch (placeholder) {
-            // First list player stuff
             case "player_name":
                 return fPlayer.getName();
             case "player_lastseen":
@@ -107,7 +103,6 @@ public class ClipPlaceholderAPIManager extends PlaceholderExpansion implements R
                 return fPlayer.hasFaction() ? fPlayer.getRole().getPrefix() : "";
             case "player_role_name":
                 return fPlayer.hasFaction() ? fPlayer.getRole().getTranslation().toString() : TL.PLACEHOLDER_ROLE_NAME.toString();
-            // Then Faction stuff
             case "faction_name":
                 return fPlayer.hasFaction() ? faction.getTag() : TL.NOFACTION_PREFIX.toString();
             case "faction_name_custom":
@@ -151,6 +146,33 @@ public class ClipPlaceholderAPIManager extends PlaceholderExpansion implements R
             case "faction_raidable":
                 boolean raid = FactionsPlugin.getInstance().getConfig().getBoolean("hcf.raidable", false) && faction.getLandRounded() >= faction.getPowerRounded();
                 return raid ? TL.RAIDABLE_TRUE.toString() : TL.RAIDABLE_FALSE.toString();
+
+            case "grace":
+            case "grace_active":
+            case "graceperiod":
+            case "graceperiod_active": {
+                boolean active = Conf.useGraceSystem
+                        && FactionsPlugin.getInstance().getTimerManager() != null
+                        && FactionsPlugin.getInstance().getTimerManager().graceTimer != null
+                        && FactionsPlugin.getInstance().getTimerManager().graceTimer.getRemaining() > 0L;
+                return active ? "true" : "false";
+            }
+            case "grace_status":
+            case "graceperiod_status": {
+                boolean active = Conf.useGraceSystem
+                        && FactionsPlugin.getInstance().getTimerManager() != null
+                        && FactionsPlugin.getInstance().getTimerManager().graceTimer != null
+                        && FactionsPlugin.getInstance().getTimerManager().graceTimer.getRemaining() > 0L;
+                return active ? ChatColor.GREEN + "ON" : ChatColor.RED + "OFF";
+            }
+            case "grace_remaining":
+            case "graceperiod_remaining": {
+                if (!Conf.useGraceSystem || FactionsPlugin.getInstance().getTimerManager() == null
+                        || FactionsPlugin.getInstance().getTimerManager().graceTimer == null) return "0";
+                long rem = FactionsPlugin.getInstance().getTimerManager().graceTimer.getRemaining();
+                if (rem <= 0L) return "0";
+                return TimerManager.getRemaining(rem, true);
+            }
             case "faction_home_world":
                 return faction.hasHome() ? faction.getHome().getWorld().getName() : "";
             case "faction_home_x":
@@ -211,7 +233,6 @@ public class ClipPlaceholderAPIManager extends PlaceholderExpansion implements R
                 Faction factionAtLocation = Board.getInstance().getFactionAt(FLocation.wrap(player.getLocation()));
                 return factionAtLocation != null ? factionAtLocation.getTag() : Factions.getInstance().getWilderness().getTag();
         }
-        //If it's not hardcoded lets try to grab it anyway
         boolean targetFaction = false;
         Object target = fPlayer;
         String stripped;

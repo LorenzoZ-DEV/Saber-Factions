@@ -75,10 +75,15 @@ public abstract class SaberGUI {
         this.refreshIntervalTicks = intervalTicks;
         if (refreshTaskId != -1) Bukkit.getScheduler().cancelTask(refreshTaskId);
         this.refreshTaskId = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, () -> {
-            if (this.player.getOpenInventory().getTopInventory().equals(this.inventory)) {
-                this.redraw();
+            if (SaberGUI.getActiveGUI(this.player.getUniqueId()) == this) {
+                try {
+                    this.redraw();
+                } catch (Throwable t) {
+                    t.printStackTrace();
+                }
             } else {
                 Bukkit.getScheduler().cancelTask(refreshTaskId);
+                refreshTaskId = -1;
             }
         }, intervalTicks, intervalTicks);
     }
