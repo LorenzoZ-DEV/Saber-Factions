@@ -9,7 +9,7 @@ import com.massivecraft.factions.cmd.CommandContext;
 import com.massivecraft.factions.cmd.CommandRequirements;
 import com.massivecraft.factions.cmd.FCommand;
 import com.massivecraft.factions.struct.Permission;
-import com.massivecraft.factions.util.timer.TimerManager;
+import com.massivecraft.factions.util.TimeFormatter;
 import com.massivecraft.factions.zcore.util.TL;
 
 import java.util.concurrent.TimeUnit;
@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit;
 public class CmdGrace extends FCommand {
 
     /**
-     * @author Driftay
+     * @author onlynelchilling
      */
 
     public CmdGrace() {
@@ -38,13 +38,14 @@ public class CmdGrace extends FCommand {
         }
 
         if (context.args.size() == 1) {
-            if (context.sender.hasPermission(String.valueOf(Permission.GRACETOGGLE))) {
+            if (Permission.GRACETOGGLE.has(context.sender, true)) {
                 if (context.argAsString(0).equalsIgnoreCase("on") || context.argAsString(0).equalsIgnoreCase("start")) {
                     FactionsPlugin.getInstance().getTimerManager().graceTimer.setPaused(false);
                     FactionsPlugin.getInstance().getTimerManager().graceTimer.setRemaining(TimeUnit.DAYS.toMillis(Conf.gracePeriodTimeDays), true);
                     if (Conf.broadcastGraceToggles) {
+                        String formatted = TimeFormatter.format(FactionsPlugin.getInstance().getTimerManager().graceTimer.getRemaining());
                         for (FPlayer follower : FPlayers.getInstance().getOnlinePlayers())
-                            follower.msg(TL.COMMAND_GRACE_ENABLED_FORMAT, String.valueOf(TimerManager.getRemaining(FactionsPlugin.getInstance().getTimerManager().graceTimer.getRemaining(), true)));
+                            follower.msg(TL.COMMAND_GRACE_ENABLED_FORMAT, formatted);
                     }
                     return;
                 }
@@ -64,7 +65,7 @@ public class CmdGrace extends FCommand {
         if (FactionsPlugin.getInstance().getTimerManager().graceTimer.getRemaining() <= 0L) {
             context.fPlayer.msg(TL.COMMAND_GRACE_DISABLED_NO_FORMAT.toString());
         } else {
-            context.fPlayer.msg(TL.COMMAND_GRACE_TIME_REMAINING, String.valueOf(TimerManager.getRemaining(FactionsPlugin.getInstance().getTimerManager().graceTimer.getRemaining(), true)));
+            context.fPlayer.msg(TL.COMMAND_GRACE_TIME_REMAINING, TimeFormatter.format(FactionsPlugin.getInstance().getTimerManager().graceTimer.getRemaining()));
         }
 
     }

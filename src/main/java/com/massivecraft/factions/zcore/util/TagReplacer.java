@@ -3,6 +3,7 @@ package com.massivecraft.factions.zcore.util;
 import com.massivecraft.factions.*;
 import com.massivecraft.factions.integration.Econ;
 import com.massivecraft.factions.struct.Relation;
+import com.massivecraft.factions.util.TimeFormatter;
 import com.massivecraft.factions.util.timer.TimerManager;
 import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.bukkit.Bukkit;
@@ -128,7 +129,7 @@ public enum TagReplacer {
     private String getValue() {
         switch (this) {
             case GRACE_TIMER:
-                return TimerManager.getRemaining(FactionsPlugin.getInstance().getTimerManager().graceTimer.getRemaining(), true);
+                return TimeFormatter.format(FactionsPlugin.getInstance().getTimerManager().graceTimer.getRemaining());
             case TOTAL_ONLINE:
                 return String.valueOf(Bukkit.getOnlinePlayers().size());
             case FACTIONLESS:

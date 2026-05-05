@@ -10,6 +10,7 @@ import com.massivecraft.factions.struct.Role;
 import com.massivecraft.factions.util.Cooldown;
 import com.massivecraft.factions.util.Logger;
 import com.massivecraft.factions.util.MiscUtil;
+import com.massivecraft.factions.util.SoundUtil;
 import com.massivecraft.factions.zcore.util.TL;
 import org.bukkit.Bukkit;
 
@@ -117,6 +118,7 @@ public class CmdCreate extends FCommand {
                 follower.msg(TL.COMMAND_CREATE_CREATED, context.fPlayer.getName(), faction.getTag(follower));
             }
         }
+        SoundUtil.play("sounds.faction-create", context.player);
         context.msg(TL.COMMAND_CREATE_YOUSHOULD, FactionsPlugin.getInstance().cmdBase.cmdDescription.getUsageTemplate(context));
         if (Conf.econEnabled) Econ.setBalance(faction.getAccountId(), Conf.econFactionStartingBalance);
         if (Conf.logFactionCreate)

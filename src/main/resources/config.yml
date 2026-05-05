@@ -589,6 +589,31 @@ faction-leader-broadcast: true #Disabling this will not make leader changes appe
 
 ############################################################
 # +------------------------------------------------------+ #
+# |                       Sounds                          |#
+# +------------------------------------------------------+ #
+############################################################
+# Sounds played when specific faction events occur.
+# 'sound' accepts both modern (1.13+) and legacy (1.8) names — XSound is used to resolve them.
+#   Examples 1.8:  LEVEL_UP, WITHER_SPAWN, ANVIL_LAND, NOTE_PLING
+#   Examples 1.13+: ENTITY_PLAYER_LEVELUP, ENTITY_WITHER_SPAWN, BLOCK_ANVIL_LAND, BLOCK_NOTE_BLOCK_PLING
+# 'broadcast: true'  -> plays the sound to every online player.
+# 'broadcast: false' -> plays the sound only to the player who triggered the event.
+sounds:
+  faction-create:
+    enabled: true
+    sound: LEVEL_UP
+    volume: 1.0
+    pitch: 1.0
+    broadcast: true
+  faction-disband:
+    enabled: true
+    sound: ENTITY_EXPERIENCE_ORB_PICKUP
+    volume: 1.0
+    pitch: 1.0
+    broadcast: true
+
+############################################################
+# +------------------------------------------------------+ #
 # |                Faction Check System                   |#
 # +------------------------------------------------------+ #
 ############################################################

@@ -8,6 +8,7 @@ import com.massivecraft.factions.util.ChunkReference;
 import com.massivecraft.factions.util.Cooldown;
 import com.massivecraft.factions.util.FastChunk;
 import com.massivecraft.factions.util.PlayerDataRegistry;
+import com.massivecraft.factions.util.SoundUtil;
 import com.massivecraft.factions.zcore.fperms.Access;
 import com.massivecraft.factions.zcore.fperms.PermissableAction;
 import com.massivecraft.factions.zcore.frame.fdisband.FDisbandFrame;
@@ -97,6 +98,7 @@ public class CmdDisband extends FCommand {
         }
 
         broadcastDisband(context, faction);
+        SoundUtil.play("sounds.faction-disband", context.player);
         faction.disband(context.player, PlayerDisbandReason.COMMAND);
         Cooldown.setCooldown(context.fPlayer.getPlayer(), "disbandCooldown", FactionsPlugin.getInstance().getConfig().getInt("fcooldowns.f-disband"));
     }
@@ -108,7 +110,7 @@ public class CmdDisband extends FCommand {
 
 
     private void broadcastDisband(CommandContext context, Faction faction) {
-        if (FactionsPlugin.getInstance().getConfig().getBoolean("faction-disband-broadcast", true)) {
+        if (FactionsPlugin.getInstance().getConfig().getBoolean("faction-disband-broadcast")) {
 
             String yours_message = TL.COMMAND_DISBAND_BROADCAST_YOURS.toString().replace("{claims}", String.valueOf(faction.getAllClaims().size()));
             String notyours_message = TL.COMMAND_DISBAND_BROADCAST_NOTYOURS.toString().replace("{claims}", String.valueOf(faction.getAllClaims().size()));
