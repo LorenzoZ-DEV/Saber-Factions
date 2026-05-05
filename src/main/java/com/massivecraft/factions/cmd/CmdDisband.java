@@ -109,9 +109,11 @@ public class CmdDisband extends FCommand {
 
     private void broadcastDisband(CommandContext context, Faction faction) {
         if (FactionsPlugin.getInstance().getConfig().getBoolean("faction-disband-broadcast", true)) {
+
             String yours_message = TL.COMMAND_DISBAND_BROADCAST_YOURS.toString().replace("{claims}", String.valueOf(faction.getAllClaims().size()));
             String notyours_message = TL.COMMAND_DISBAND_BROADCAST_NOTYOURS.toString().replace("{claims}", String.valueOf(faction.getAllClaims().size()));
             String amountString = context.sender instanceof ConsoleCommandSender ? TL.GENERIC_SERVERADMIN.toString() : context.fPlayer.describeTo(null);
+
             if (yours_message.contains("{player}") || notyours_message.contains("{player}")) {
                 amountString = context.sender instanceof ConsoleCommandSender ? TL.GENERIC_SERVERADMIN.toString() : context.fPlayer.getName();
             }

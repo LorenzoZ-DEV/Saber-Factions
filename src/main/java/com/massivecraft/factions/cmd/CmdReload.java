@@ -28,6 +28,8 @@ public class CmdReload extends FCommand {
         FactionsPlugin.getInstance().reloadConfig();
         FactionsPlugin.getInstance().loadLang();
 
+        // Invalidate cached scoreboard templates
+        com.massivecraft.factions.scoreboards.sidebar.FDefaultSidebar.invalidateCache();
 
         if (FactionsPlugin.getInstance().version != 7) {
             FactionsPlayerListener.loadCorners();
