@@ -4,6 +4,7 @@ import com.massivecraft.factions.util.PlayerCacheManager;
 import com.massivecraft.factions.util.PlayerDataRegistry;
 import com.massivecraft.factions.util.flight.EnemyProximityCache;
 import com.massivecraft.factions.util.flight.FlightCache;
+import com.massivecraft.factions.util.flight.FlightEnhance;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -41,6 +42,7 @@ public final class PlayerRegistryListener implements Listener {
         PlayerDataRegistry.clearAll(uuid);
         FlightCache.invalidate(uuid);
         EnemyProximityCache.invalidate(uuid);
+        FlightEnhance.invalidate(uuid);
         PlayerCacheManager.removePlayer(uuid);
     }
 }

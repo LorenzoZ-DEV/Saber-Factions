@@ -4,6 +4,7 @@ import com.massivecraft.factions.*;
 import com.massivecraft.factions.struct.ChatMode;
 import com.massivecraft.factions.struct.Relation;
 import com.massivecraft.factions.struct.Role;
+import com.massivecraft.factions.tag.Tag;
 import com.massivecraft.factions.util.Logger;
 import com.massivecraft.factions.util.WarmUpUtil;
 import com.massivecraft.factions.zcore.util.TL;
@@ -23,6 +24,8 @@ import java.util.logging.Level;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import static com.massivecraft.factions.tag.Tag.parsePlaceholders;
 
 public class FactionsChatListener implements Listener {
 
@@ -84,6 +87,11 @@ public class FactionsChatListener implements Listener {
             return false;
         }
         String finalLine = resolvePapi(player, formatted);
+
+        FPlayer fp = FPlayers.getInstance().getByPlayer(player);
+        if (fp != null) {
+            finalLine = Tag.parsePlain(fp, finalLine);
+        }
         finalLine = ChatColor.translateAlternateColorCodes('&', finalLine);
         Bukkit.broadcastMessage(finalLine);
         event.setCancelled(true);
@@ -105,7 +113,14 @@ public class FactionsChatListener implements Listener {
             for (Object a : args) sb.append(a).append(' ');
             return sb.toString().trim();
         }
-        String parsed = com.massivecraft.factions.tag.Tag.parsePlaceholders(player, formatted);
+        String parsed;
+        FPlayer fp = FPlayers.getInstance().getByPlayer(player);
+        if (fp != null) {
+            parsed = com.massivecraft.factions.tag.Tag.parsePlain(fp, formatted);
+        } else {
+            parsed = formatted;
+        }
+        parsed = resolvePapi(player, parsed);
         return ChatColor.translateAlternateColorCodes('&', parsed);
     }
 
@@ -222,18 +237,12 @@ public class FactionsChatListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onPlayerChat(AsyncPlayerChatEvent event) {
 
-        if (!Conf.chatTagEnabled || Conf.chatTagHandledByAnotherPlugin) {
-            return;
-        }
-
         Player talkingPlayer = event.getPlayer();
         String msg = event.getMessage();
-        String eventFormat = event.getFormat();
         FPlayer me = FPlayers.getInstance().getByPlayer(talkingPlayer);
-        int insertIndex;
 
+        FileConfiguration cfg = FactionsPlugin.getInstance().getConfig();
         if (!me.hasFaction()) {
-            FileConfiguration cfg = FactionsPlugin.getInstance().getConfig();
             if (cfg.getBoolean("chat.no-faction.enabled", true)) {
                 String rawFormat = cfg.getString("chat.no-faction.format", "");
                 if (rawFormat != null && !rawFormat.isEmpty()) {
@@ -243,7 +252,6 @@ public class FactionsChatListener implements Listener {
                 }
             }
         } else {
-            FileConfiguration cfg = FactionsPlugin.getInstance().getConfig();
             if (cfg.getBoolean("chat.public.enabled", true)) {
                 String rawFormat = cfg.getString("chat.public.format", "");
                 if (rawFormat != null && !rawFormat.isEmpty()) {
@@ -253,6 +261,13 @@ public class FactionsChatListener implements Listener {
                 }
             }
         }
+
+        if (!Conf.chatTagEnabled || Conf.chatTagHandledByAnotherPlugin) {
+            return;
+        }
+
+        String eventFormat = event.getFormat();
+        int insertIndex;
 
         if (!Conf.chatTagReplaceString.isEmpty() && eventFormat.contains(Conf.chatTagReplaceString)) {
             eventFormat = TextUtil.replace(eventFormat, "[FACTION_TITLE]", me.getTitle());

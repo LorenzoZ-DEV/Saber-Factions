@@ -20,10 +20,6 @@ import java.util.concurrent.TimeUnit;
 
 public class CmdDisband extends FCommand {
 
-    /**
-     * @author FactionsUUID Team - Modified By CmdrKittens
-     */
-
     private final HashMap<String, String> disbandMap;
 
     public CmdDisband() {
@@ -59,14 +55,24 @@ public class CmdDisband extends FCommand {
         }
 
         if(Conf.userSpawnerChunkSystem && !Conf.allowUnclaimSpawnerChunksWithSpawnersInChunk) {
-            for(FastChunk fastChunk : faction.getSpawnerChunks()) {
-                if(ChunkReference.getSpawnerCount(fastChunk.getChunk()) > 0) {
-                    context.msg(TL.COMMAND_DISBAND_SPAWNERS_SPAWNER_CHUNKS_FOUND.toString().replace("{faction}", faction.getTag()));
-                    return;
-                }
-            }
+            FastChunk.preloadAll(faction.getSpawnerChunks()).thenRun(() ->
+                Bukkit.getScheduler().runTask(FactionsPlugin.getInstance(), () -> {
+                    for (FastChunk fastChunk : faction.getSpawnerChunks()) {
+                        if (ChunkReference.getSpawnerCount(fastChunk.getChunk()) > 0) {
+                            context.msg(TL.COMMAND_DISBAND_SPAWNERS_SPAWNER_CHUNKS_FOUND.toString().replace("{faction}", faction.getTag()));
+                            return;
+                        }
+                    }
+                    finalizeDisband(context, faction);
+                })
+            );
+            return;
         }
 
+        finalizeDisband(context, faction);
+    }
+
+    private void finalizeDisband(CommandContext context, Faction faction) {
         if (context.player == null) {
             faction.disband(null, PlayerDisbandReason.PLUGIN);
             return;

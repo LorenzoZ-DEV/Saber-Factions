@@ -82,8 +82,8 @@ ftop-gui:
   no-faction-head-item:
     Name: '&c&lYou are not in a faction'
     Lore:
-      - '&eUse &f/f create <nome> &eto create a faction,'
-      - '&eor use &f/f join <nome> &eto join an existing faction.'
+      - '&eUse &f/f create <name> &eto create a faction,'
+      - '&eor use &f/f join <name> &eto join an existing faction.'
   prev-item:
     Type: ARROW
     Name: '&c« Back'
@@ -555,7 +555,7 @@ chat:
   # Set "enabled: false" or leave format empty to fall back to the legacy chat-tag insertion.
   public:
     enabled: true
-    format: '%luckperms_prefix%&f%1$s &8» &f%2$s'
+    format: '&7[&a{faction}&7] %luckperms_prefix%&f%1$s &8» &f%2$s'
   # Format used for /f c f (faction-only chat). %1$s = player name (with relation color),
   # %2$s = message. PAPI placeholders supported.
   faction:

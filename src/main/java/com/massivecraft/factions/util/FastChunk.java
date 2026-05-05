@@ -3,8 +3,13 @@ package com.massivecraft.factions.util;
 import com.massivecraft.factions.FLocation;
 import org.bukkit.Bukkit;
 import org.bukkit.Chunk;
+import org.bukkit.World;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 public class FastChunk {
 
@@ -45,6 +50,25 @@ public class FastChunk {
 
     public Chunk getChunk() {
         return Bukkit.getWorld(world).getChunkAt(getX(), getZ());
+    }
+
+    public CompletableFuture<Chunk> getChunkAsync() {
+        World w = Bukkit.getWorld(world);
+        if (w == null) return CompletableFuture.completedFuture(null);
+        CompletableFuture<Chunk> future = new CompletableFuture<>();
+        AsyncChunkLoader.load(w, getX(), getZ(), future);
+        return future;
+    }
+
+    public void getChunkAsync(Consumer<Chunk> callback) {
+        getChunkAsync().thenAccept(callback);
+    }
+
+    public static CompletableFuture<Void> preloadAll(Iterable<FastChunk> chunks) {
+        List<CompletableFuture<Chunk>> futures = new ArrayList<>();
+        for (FastChunk fc : chunks) futures.add(fc.getChunkAsync());
+        if (futures.isEmpty()) return CompletableFuture.completedFuture(null);
+        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
     }
 
     @Override

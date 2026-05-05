@@ -19,11 +19,6 @@ import org.bukkit.Bukkit;
 
 public class CmdUnclaimall extends FCommand {
 
-    /**
-     * @author FactionsUUID Team - Modified By CmdrKittens
-     */
-
-    //TODO: Add UnclaimAll Confirmation GUI
     public CmdUnclaimall() {
         this.getAliases().addAll(Aliases.unclaim_all_unsafe);
 
@@ -32,7 +27,7 @@ public class CmdUnclaimall extends FCommand {
         this.setRequirements(new CommandRequirements.Builder(Permission.UNCLAIM_ALL)
                 .playerOnly()
                 .memberOnly()
-                .withAction(PermissableAction.TERRITORY) //TODO: Add Unclaimall PermissableAction
+                .withAction(PermissableAction.TERRITORY)
                 .build());
     }
 
@@ -67,14 +62,26 @@ public class CmdUnclaimall extends FCommand {
         }
 
         if(Conf.userSpawnerChunkSystem && !Conf.allowUnclaimSpawnerChunksWithSpawnersInChunk) {
-            for(FastChunk fastChunk : target.getSpawnerChunks()) {
-                if(ChunkReference.getSpawnerCount(fastChunk.getChunk()) > 0) {
-                    context.msg(TL.COMMAND_UNCLAIMALL_SPAWNERS_IN_CHUNK.toString().replace("{faction}", target.getTag()));
-                    return;
-                }
-            }
+            final Faction targetFinal = target;
+
+            FastChunk.preloadAll(targetFinal.getSpawnerChunks()).thenRun(() ->
+                Bukkit.getScheduler().runTask(FactionsPlugin.getInstance(), () -> {
+                    for (FastChunk fastChunk : targetFinal.getSpawnerChunks()) {
+                        if (ChunkReference.getSpawnerCount(fastChunk.getChunk()) > 0) {
+                            context.msg(TL.COMMAND_UNCLAIMALL_SPAWNERS_IN_CHUNK.toString().replace("{faction}", targetFinal.getTag()));
+                            return;
+                        }
+                    }
+                    finalizeUnclaimAll(context, targetFinal);
+                })
+            );
+            return;
         }
 
+        finalizeUnclaimAll(context, target);
+    }
+
+    private void finalizeUnclaimAll(CommandContext context, Faction target) {
         LandUnclaimAllEvent unclaimAllEvent = new LandUnclaimAllEvent(target, context.fPlayer);
         Bukkit.getScheduler().runTaskLater(FactionsPlugin.getInstance(), () -> Bukkit.getServer().getPluginManager().callEvent(unclaimAllEvent), 1);
         if (unclaimAllEvent.isCancelled()) {
