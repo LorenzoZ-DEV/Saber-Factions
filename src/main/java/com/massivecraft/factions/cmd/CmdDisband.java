@@ -7,6 +7,7 @@ import com.massivecraft.factions.struct.Role;
 import com.massivecraft.factions.util.ChunkReference;
 import com.massivecraft.factions.util.Cooldown;
 import com.massivecraft.factions.util.FastChunk;
+import com.massivecraft.factions.util.PlayerDataRegistry;
 import com.massivecraft.factions.zcore.fperms.Access;
 import com.massivecraft.factions.zcore.fperms.PermissableAction;
 import com.massivecraft.factions.zcore.frame.fdisband.FDisbandFrame;
@@ -14,13 +15,8 @@ import com.massivecraft.factions.zcore.util.TL;
 import org.bukkit.Bukkit;
 import org.bukkit.command.ConsoleCommandSender;
 
-import java.util.HashMap;
-import java.util.concurrent.TimeUnit;
-
 
 public class CmdDisband extends FCommand {
-
-    private final HashMap<String, String> disbandMap;
 
     public CmdDisband() {
         super();
@@ -28,7 +24,6 @@ public class CmdDisband extends FCommand {
         this.getOptionalArgs().put("faction tag", "yours");
         this.setRequirements(new CommandRequirements.Builder(Permission.DISBAND)
                 .build());
-        this.disbandMap = new HashMap<>();
     }
 
     @Override
@@ -83,9 +78,22 @@ public class CmdDisband extends FCommand {
             return;
         }
 
-        if (!isConfirmingDisband(context)) {
-            promptDisbandConfirmation(context, faction);
-            return;
+        boolean confirmEnabled = FactionsPlugin.getInstance().getConfig().getBoolean("f-disband-gui.enabled", true);
+        boolean bypass = context.fPlayer.isAdminBypassing();
+
+        if (confirmEnabled && !bypass) {
+            boolean confirmed = PlayerDataRegistry.hasActive(
+                    context.player.getUniqueId(),
+                    PlayerDataRegistry.TS_DISBAND_CONFIRM);
+            if (!confirmed) {
+                new FDisbandFrame(context.player).openGUI(FactionsPlugin.getInstance());
+                return;
+            }
+
+            PlayerDataRegistry.setExpireAt(
+                    context.player.getUniqueId(),
+                    PlayerDataRegistry.TS_DISBAND_CONFIRM,
+                    0L);
         }
 
         broadcastDisband(context, faction);
@@ -98,22 +106,6 @@ public class CmdDisband extends FCommand {
         return context.fPlayer.getRole() == Role.LEADER || faction.getFPlayerLeader() == context.fPlayer || access == Access.ALLOW;
     }
 
-    private boolean isConfirmingDisband(CommandContext context) {
-        boolean access = com.massivecraft.factions.util.PlayerDataRegistry.hasActive(
-                context.fPlayer.getPlayer().getUniqueId(),
-                com.massivecraft.factions.util.PlayerDataRegistry.TS_DISBAND_CONFIRM);
-        return access || Conf.useDisbandGUI && (!context.fPlayer.isAdminBypassing() || !context.player.isOp()) && !disbandMap.containsKey(context.player.getUniqueId().toString());
-    }
-
-    private void promptDisbandConfirmation(CommandContext context, Faction faction) {
-        if (!disbandMap.containsKey(context.player.getUniqueId().toString()) && faction.getTnt() > 0) {
-            context.msg(TL.COMMAND_DISBAND_CONFIRM.toString().replace("{tnt}", String.valueOf(faction.getTnt())));
-            disbandMap.put(context.player.getUniqueId().toString(), faction.getId());
-            Bukkit.getScheduler().scheduleSyncDelayedTask(FactionsPlugin.getInstance(), () -> disbandMap.remove(context.player.getUniqueId().toString()), 200L);
-        } else if (!disbandMap.containsKey(context.player.getUniqueId().toString())) {
-            new FDisbandFrame(context.player).openGUI(FactionsPlugin.getInstance());
-        }
-    }
 
     private void broadcastDisband(CommandContext context, Faction faction) {
         if (FactionsPlugin.getInstance().getConfig().getBoolean("faction-disband-broadcast", true)) {
