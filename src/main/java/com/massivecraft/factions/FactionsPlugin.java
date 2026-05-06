@@ -182,8 +182,14 @@ public class FactionsPlugin extends MPlugin {
                         }
                     }
                 }
+
+                long sbIntervalSeconds = getConfig().getLong("scoreboard.default-update-interval", 1L);
+                if (sbIntervalSeconds <= 0L) sbIntervalSeconds = 1L;
+                com.massivecraft.factions.scoreboards.FScoreboard
+                        .startScheduledUpdate(this, sbIntervalSeconds * 20L);
             }
             Bukkit.getPluginManager().registerEvents(factionsPlayerListener = new FactionsPlayerListener(), this);
+            Bukkit.getPluginManager().registerEvents(new com.massivecraft.factions.scoreboards.FScoreboardListener(), this);
 
             if (Conf.userSpawnerChunkSystem) {
                 Bukkit.getPluginManager().registerEvents(new SpawnerChunkListener(), this);
@@ -312,6 +318,7 @@ public class FactionsPlugin extends MPlugin {
         safeShutdown("PlayerCacheManager", com.massivecraft.factions.util.PlayerCacheManager::clear);
         safeShutdown("FTopCache",         () -> com.massivecraft.factions.cmd.ftop.FTopCache.getInstance().clear());
         safeShutdown("BalTopCache",       () -> com.massivecraft.factions.cmd.baltop.BalTopCache.getInstance().clear());
+        safeShutdown("FScoreboardScheduler", com.massivecraft.factions.scoreboards.FScoreboard::stopScheduledUpdate);
 
         safeShutdown("AutoLeaveTask", () -> {
             if (this.AutoLeaveTask != null) {

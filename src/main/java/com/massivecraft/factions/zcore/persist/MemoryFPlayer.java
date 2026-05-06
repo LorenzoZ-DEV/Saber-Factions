@@ -36,15 +36,6 @@ import java.util.*;
 import static com.massivecraft.factions.integration.Econ.moneyString;
 
 
-/**
- * Logged in players always have exactly one FPlayer instance. Logged out players may or may not have an FPlayer
- * instance. They will always have one if they are part of a faction. This is because only players with a faction are
- * saved to disk (in order to not waste disk space).
- * The FPlayer is linked to a minecraft player using the player name.
- * The same instance is always returned for the same player. This means you can use the == operator. No .equals method
- * necessary.
- */
-
 public abstract class MemoryFPlayer implements FPlayer {
     public boolean enemiesNearby = false;
     public boolean inChest = false;
@@ -73,13 +64,13 @@ public abstract class MemoryFPlayer implements FPlayer {
     protected boolean isAdminBypassing = false;
     protected int kills, deaths;
     protected boolean willAutoLeave = true;
-    protected int mapHeight = 8; // default to old value
+    protected int mapHeight = 8;
     protected boolean isFlying = false;
     protected boolean isAutoFlying = false;
     protected boolean isAlt;
     protected boolean enteringPassword = false;
     protected String enteringPasswordWarp = "";
-    protected transient FLocation lastStoodAt = FLocation.empty(); // Where did this player stand the last time we checked?
+    protected transient FLocation lastStoodAt = FLocation.empty();
     protected transient boolean mapAutoUpdating;
     protected transient Faction autoClaimFor;
     protected transient Faction autoUnclaimFor;
@@ -93,10 +84,6 @@ public abstract class MemoryFPlayer implements FPlayer {
     boolean inspectMode = false;
     boolean friendlyFire = false;
 
-    /**
-     * Cached UUID so {@link #getPlayer()} can avoid parsing the id String on
-     * every invocation. Lazily populated; intentionally non-serialised.
-     */
     private transient UUID cachedUuid;
 
     public MemoryFPlayer() {
@@ -232,7 +219,6 @@ public abstract class MemoryFPlayer implements FPlayer {
         if (alt) faction.addAltPlayer(this);
         else faction.addFPlayer(this);
         this.factionId = faction.getId();
-        // Faction changed → relations change too; drop cached fly evaluation.
         UUID uid = this.cachedUuid;
         if (uid != null) com.massivecraft.factions.util.flight.FlightCache.invalidate(uid);
     }
@@ -297,7 +283,6 @@ public abstract class MemoryFPlayer implements FPlayer {
     }
 
     public Role getRole() {
-        // Hack to fix null roles..
         if (role == null) this.role = Role.NORMAL;
         return this.role;
     }
@@ -326,7 +311,6 @@ public abstract class MemoryFPlayer implements FPlayer {
 
     public void setAutoLeave(boolean willLeave) {
         this.willAutoLeave = willLeave;
-        //Logger.print(name + " set autoLeave to " + willLeave, Logger.PrefixType.DEFAULT);
     }
 
     public long getLastFrostwalkerMessage() {
@@ -412,17 +396,11 @@ public abstract class MemoryFPlayer implements FPlayer {
         this.spyingChat = chatSpying;
     }
 
-    // -------------------------------------------- //
-    // Getters And Setters
-    // -------------------------------------------- //
-
-    // FIELD: account
     public String getAccountId() {
         return this.getId();
     }
 
     public void resetFactionData(boolean doSpoutUpdate) {
-        // clean up any territory ownership in old faction, if there is one
         if (factionId != null && Factions.getInstance().isValidFactionId(this.getFactionId())) {
             Faction currentFaction = this.getFaction();
 
@@ -432,7 +410,7 @@ public abstract class MemoryFPlayer implements FPlayer {
             }
         }
 
-        this.factionId = "0"; // The default neutral faction
+        this.factionId = "0";
         this.chatMode = ChatMode.PUBLIC;
         this.role = Role.NORMAL;
         this.title = "";
@@ -464,12 +442,6 @@ public abstract class MemoryFPlayer implements FPlayer {
         this.mapAutoUpdating = mapAutoUpdating;
     }
 
-    //----------------------------------------------//
-    // Title, Name, Faction Tag and Chat
-    //----------------------------------------------//
-
-    // Base:
-
     public boolean hasLoginPvpDisabled() {
         if (!loginPvpDisabled) return false;
         if (this.lastLoginTime + (Conf.noPVPDamageToOthersForXSecondsAfterLogin * 1000L) < System.currentTimeMillis()) {
@@ -492,19 +464,13 @@ public abstract class MemoryFPlayer implements FPlayer {
     }
 
     public void setTitle(CommandSender sender, String title) {
-        // Check if the setter has it.
         if (sender.hasPermission(Permission.TITLE_COLOR.node))
             title = TextUtil.parse(title);
         this.title = title;
     }
 
-    // Base concatenations:
-
     public String getName() {
         if (this.name == null) {
-            // Older versions of FactionsUUID don't save the name,
-            // so `name` will be null the first time it's retrieved
-            // after updating
             OfflinePlayer offline = Bukkit.getOfflinePlayer(FastUUID.parseUUID(getId()));
             this.name = offline.getName() != null ? offline.getName() : getId();
         }
@@ -519,9 +485,6 @@ public abstract class MemoryFPlayer implements FPlayer {
         return this.hasFaction() ? this.getFaction().getTag() : "";
     }
 
-    // Colored concatenations:
-    // These are used in information messages
-
     public String getNameAndSomething(String something) {
         return this.role.getPrefix() + (something.length() > 0 ? something + " " : "") + this.getName();
     }
@@ -529,9 +492,6 @@ public abstract class MemoryFPlayer implements FPlayer {
     public String getNameAndTitle() {
         return this.getNameAndSomething(this.getTitle());
     }
-
-    // Chat Tag:
-    // These are injected into the format of global chat messages.
 
     public String getNameAndTag() {
         return this.getNameAndSomething(this.getTag());
@@ -549,14 +509,9 @@ public abstract class MemoryFPlayer implements FPlayer {
         return this.hasFaction() ? String.format(Conf.chatTagFormat, this.getRole().getPrefix() + this.getTag()) : TL.NOFACTION_PREFIX.toString();
     }
 
-    // Colored Chat Tag
     public String getChatTag(Faction faction) {
         return this.hasFaction() ? this.getRelationTo(faction).getColor() + getChatTag() : "";
     }
-
-    // -------------------------------
-    // Relation and relation colors
-    // -------------------------------
 
     public String getChatTag(MemoryFPlayer fplayer) {
         return this.hasFaction() ? this.getColorTo(fplayer) + getChatTag() : "";
@@ -599,18 +554,12 @@ public abstract class MemoryFPlayer implements FPlayer {
         return RelationUtil.getColorOfThatToMe(this, rp);
     }
 
-    //----------------------------------------------//
-    // Health
-    //----------------------------------------------//
     public void heal(int amnt) {
         Player player = this.getPlayer();
         if (player == null) return;
         player.setHealth(player.getHealth() + amnt);
     }
 
-    //----------------------------------------------//
-    // Power
-    //----------------------------------------------//
     public double getPower() {
         if (this.isAlt() && !FactionsPlugin.getInstance().getConfig().getBoolean("f-alts.Have-Power")) {
             return 0.0;
@@ -680,7 +629,11 @@ public abstract class MemoryFPlayer implements FPlayer {
         return this.lastPowerUpdateTime;
     }
 
+    private transient boolean updatingPower = false;
+
     public void updatePower() {
+        if (this.updatingPower) return;
+
         if (this.isAlt() && !FactionsPlugin.getInstance().getConfig().getBoolean("f-alts.Have-Power")) return;
 
         if (this.isOffline()) {
@@ -700,9 +653,14 @@ public abstract class MemoryFPlayer implements FPlayer {
         double delta = millisPassed * Conf.powerPerMinute / 60000.0;
 
         Runnable regen = () -> {
-            PowerRegenEvent e = new PowerRegenEvent(getFaction(), this, delta);
-            Bukkit.getPluginManager().callEvent(e);
-            if (!e.isCancelled()) this.alterPower(e.getDelta());
+            this.updatingPower = true;
+            try {
+                PowerRegenEvent e = new PowerRegenEvent(getFaction(), this, delta);
+                Bukkit.getPluginManager().callEvent(e);
+                if (!e.isCancelled()) this.alterPower(e.getDelta());
+            } finally {
+                this.updatingPower = false;
+            }
         };
 
         if (Bukkit.isPrimaryThread()) regen.run();
@@ -734,9 +692,6 @@ public abstract class MemoryFPlayer implements FPlayer {
         if (hasFaction()) getFaction().setLastDeath(System.currentTimeMillis());
     }
 
-    //----------------------------------------------//
-    // Territory
-    //----------------------------------------------//
     public boolean isInOwnTerritory() {
         return Board.getInstance().getFactionAt(FLocation.wrap(this)) == this.getFaction();
     }
@@ -771,10 +726,6 @@ public abstract class MemoryFPlayer implements FPlayer {
             this.sendMessage(TextUtil.parse(TL.FACTION_LEAVE.format(from.getTag(this), toShow.getTag(this))));
     }
 
-    // -------------------------------
-    // Actions
-    // -------------------------------
-
     @Override
     public boolean hasAccess(FPermKey action) {
         if (action == null) {
@@ -786,12 +737,6 @@ public abstract class MemoryFPlayer implements FPlayer {
         return getFaction().getAccess(this, action) == Access.ALLOW;
     }
 
-    /**
-     * Check if the scoreboard should be shown. Simple method to be used by above method.
-     *
-     * @param toShow Faction to be shown.
-     * @return true if should show, otherwise false.
-     */
     public boolean showInfoBoard(Faction toShow) {
         return showScoreboard && !toShow.isWarZone() && !toShow.isWilderness() && !toShow.isSafeZone() && FactionsPlugin.getInstance().getConfig().contains("scoreboard.finfo") && FactionsPlugin.getInstance().getConfig().getBoolean("scoreboard.finfo-enabled", false) && FScoreboard.get(this) != null;
     }
@@ -827,18 +772,15 @@ public abstract class MemoryFPlayer implements FPlayer {
             return;
         }
 
-        // if economy is enabled and they're not on the bypass list, make sure they can pay
         if (makePay && !Econ.hasAtLeast(this, Conf.econCostLeave, TL.LEAVE_TOLEAVE.toString())) return;
         FPlayerLeaveEvent leaveEvent = new FPlayerLeaveEvent(this, myFaction, FPlayerLeaveEvent.PlayerLeaveReason.LEAVE);
         Bukkit.getServer().getPluginManager().callEvent(leaveEvent);
         if (leaveEvent.isCancelled()) return;
 
 
-        // then make 'em pay (if applicable)
         if (makePay && !Econ.modifyMoney(this, -Conf.econCostLeave, TL.LEAVE_TOLEAVE.toString(), TL.LEAVE_FORLEAVE.toString()))
             return;
 
-        // Am I the last one in the faction?
         if (myFaction.getFPlayers().size() == 1) {
             if(Conf.userSpawnerChunkSystem && !Conf.allowUnclaimSpawnerChunksWithSpawnersInChunk) {
                 for(FastChunk fastChunk : myFaction.getSpawnerChunks()) {
@@ -848,7 +790,6 @@ public abstract class MemoryFPlayer implements FPlayer {
                     }
                 }
             }
-            // Transfer all money
             if (Econ.shouldBeUsed())
                 Econ.transferMoney(this, myFaction, this, myFaction.getFactionBalance());
 
@@ -872,7 +813,6 @@ public abstract class MemoryFPlayer implements FPlayer {
         FactionsPlugin.instance.logFactionEvent(myFaction, FLogType.INVITES, this.getName(), CC.Red + "left", "the faction");
         setFlying(false);
         if (myFaction.isNormal() && !perm && myFaction.getFPlayers().isEmpty()) {
-            // Remove this faction
 
             if (FactionsPlugin.getInstance().getConfig().getBoolean("faction-disband-broadcast")) {
 
@@ -1100,7 +1040,6 @@ public abstract class MemoryFPlayer implements FPlayer {
         return this.getPlayer() != null;
     }
 
-    // make sure target player should be able to detect that this player is online
     public boolean isOnlineAndVisibleTo(Player player) {
         Player target = this.getPlayer();
         return target != null && player.canSee(target);
@@ -1137,12 +1076,9 @@ public abstract class MemoryFPlayer implements FPlayer {
             msg(TL.COMMAND_FLY_DAMAGE);
         }
 
-        // If leaving fly mode, don't let them take fall damage for x seconds.
         if (!fly) {
             int cooldown = FactionsPlugin.getInstance().getConfig().getInt("fly-falldamage-cooldown");
 
-            // If the value is 0 or lower, make them take fall damage.
-            // Otherwise, start a timer and have this cancel after a few seconds.
             if (cooldown > 0) {
                 setTakeFallDamage(false);
                 new BukkitRunnable() {
@@ -1178,9 +1114,6 @@ public abstract class MemoryFPlayer implements FPlayer {
     }
 
     public boolean canFlyAtLocation(FLocation location) {
-        // Delegate to the per-player chunk cache: the heavy work (Board lookup
-        // + 7 hasPermission calls) now runs only when the player crosses into
-        // a new chunk, not on every invocation.
         return com.massivecraft.factions.util.flight.FlightCache.canFlyAt(this, location);
     }
 
@@ -1218,16 +1151,12 @@ public abstract class MemoryFPlayer implements FPlayer {
         enteringPasswordWarp = warp;
     }
 
-    // -------------------------------------------- //
-    // Message Sending Helpers
-    // -------------------------------------------- //
-
     public String getEnteringWarp() {
         return enteringPasswordWarp;
     }
 
     public void sendMessage(String msg) {
-        if (msg.contains("{null}")) return; // user wants this message to not send
+        if (msg.contains("{null}")) return;
 
         if (msg.contains("/n/")) {
             for (String s : msg.split("/n/")) sendMessage(s);
@@ -1318,9 +1247,6 @@ public abstract class MemoryFPlayer implements FPlayer {
         Player me = getPlayer();
         if (me == null || me.hasPermission("factions.fly.bypassnearbyenemycheck")) return;
 
-        // Detection is cached per-chunk + 750 ms TTL (EnemyProximityCache) and
-        // uses Player#getNearbyEntities with a clamped radius (EnemyDetector).
-        // Effects are applied through FlightEffects.
         boolean found = com.massivecraft.factions.util.flight.EnemyProximityCache
                 .resolve(this, me, this.lastStoodAt);
 
@@ -1391,8 +1317,6 @@ public abstract class MemoryFPlayer implements FPlayer {
     }
 
     public boolean attemptClaim(Faction forFaction, FLocation flocation, boolean notifyFailure) {
-        // notifyFailure is false if called by auto-claim; no need to notify on every failure for it
-        // return value is false on failure, true on success
 
         Faction currentFaction = Board.getInstance().getFactionAt(flocation);
         int ownedLand = forFaction.getLandRounded();
@@ -1406,7 +1330,6 @@ public abstract class MemoryFPlayer implements FPlayer {
             return false;
         }
 
-        // if economy is enabled, and they're not on the bypass list, make sure they can pay
         boolean mustPay = Econ.shouldBeUsed() && !this.isAdminBypassing() && !forFaction.isSafeZone() && !forFaction.isWarZone() && (Conf.econCostClaimWilderness != 0.0);
         double cost = 0.0;
         EconomyParticipator payee = null;
@@ -1440,7 +1363,6 @@ public abstract class MemoryFPlayer implements FPlayer {
             return false;
         }
 
-        // then make 'em pay (if applicable)
         if (mustPay) {
             if (payee == this) {
                 if (!Econ.modifyMoney(payee, -cost, TL.CLAIM_TOCLAIM.toString(), TL.CLAIM_FORCLAIM.toString())) {
@@ -1456,9 +1378,7 @@ public abstract class MemoryFPlayer implements FPlayer {
             }
         }
 
-        // Was an over claim
         if (currentFaction.isNormal() && currentFaction.hasLandInflation()) {
-            // Give them money for over claiming.
             if (payee == this) {
                 Econ.modifyMoney(payee, Conf.econOverclaimRewardMultiplier, TL.CLAIM_TOOVERCLAIM.toString(), TL.CLAIM_FOROVERCLAIM.toString());
             } else if (Conf.econOverclaimRewardMultiplier > 0.0) {
@@ -1468,7 +1388,6 @@ public abstract class MemoryFPlayer implements FPlayer {
         }
 
 
-        // announce success
         if (!FactionsPlugin.cachedRadiusClaim) {
             Set<FPlayer> informTheseFPlayers = new HashSet<>();
             informTheseFPlayers.add(this);

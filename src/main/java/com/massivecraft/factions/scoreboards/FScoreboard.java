@@ -2,11 +2,11 @@ package com.massivecraft.factions.scoreboards;
 
 import com.massivecraft.factions.FPlayer;
 import com.massivecraft.factions.FPlayers;
+import com.massivecraft.factions.Faction;
 import com.massivecraft.factions.FactionsPlugin;
 import com.massivecraft.factions.zcore.util.TextUtil;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.scoreboard.DisplaySlot;
 import org.bukkit.scoreboard.Objective;
 import org.bukkit.scoreboard.Scoreboard;
@@ -25,11 +25,11 @@ public class FScoreboard {
     public static final int MAX_LINES = 15;
     private static final int MAX_LINE_LENGTH = 128;
     private static final int MAX_TITLE_LENGTH = 128;
-    private static final long DEFAULT_UPDATE_PERIOD_TICKS = 20L;
     private static final String OBJECTIVE_NAME = "f_sb";
 
     private static final Map<FPlayer, FScoreboard> fscoreboards = new ConcurrentHashMap<>();
-    private static volatile BukkitTask updateTask;
+
+    private static volatile int scheduledUpdateTaskId = -1;
 
     private final FPlayer fplayer;
     private volatile Scoreboard scoreboard;
@@ -37,7 +37,7 @@ public class FScoreboard {
 
     private volatile FSidebarProvider defaultProvider;
     private volatile FSidebarProvider temporaryProvider;
-    private volatile long temporaryExpireAt = -1L;
+    private volatile int temporaryTaskId = -1;
     private volatile boolean sidebarVisible = true;
     private volatile boolean removed = false;
 
@@ -73,7 +73,6 @@ public class FScoreboard {
             FTeamWrapper.applyUpdates(fplayer.getFaction());
         }
         FTeamWrapper.track(fboard);
-        ensureUpdateTask();
     }
 
     public static void remove(FPlayer fplayer, Player player) {
@@ -81,6 +80,7 @@ public class FScoreboard {
         if (fboard == null) return;
 
         fboard.removed = true;
+        fboard.cancelTemporaryTask();
 
         Player p = player != null ? player : fplayer.getPlayer();
         if (p != null && p.isOnline()) {
@@ -93,8 +93,6 @@ public class FScoreboard {
         fboard.unregisterObjective();
 
         FTeamWrapper.untrack(fboard);
-
-        if (fscoreboards.isEmpty()) stopUpdateTask();
     }
 
     public static FScoreboard get(FPlayer fplayer) {
@@ -105,51 +103,39 @@ public class FScoreboard {
         return fscoreboards.get(FPlayers.getInstance().getByPlayer(player));
     }
 
-    private static void ensureUpdateTask() {
-        if (updateTask != null) return;
-        synchronized (FScoreboard.class) {
-            if (updateTask != null) return;
-            int seconds = FactionsPlugin.getInstance().getConfig().getInt("scoreboard.default-update-interval", 0);
-            long period = seconds > 0 ? seconds * 20L : DEFAULT_UPDATE_PERIOD_TICKS;
-            updateTask = Bukkit.getScheduler().runTaskTimer(
-                    FactionsPlugin.getInstance(),
-                    FScoreboard::tickAll,
-                    period,
-                    period
-            );
+    public static void update(FPlayer fplayer) {
+        if (fplayer == null) return;
+        FScoreboard b = fscoreboards.get(fplayer);
+        if (b != null) b.requestUpdate();
+    }
+
+    public static void updateForFaction(Faction faction) {
+        if (faction == null) return;
+        for (FPlayer fp : faction.getFPlayersWhereOnline(true)) {
+            update(fp);
         }
     }
 
-    private static void stopUpdateTask() {
-        synchronized (FScoreboard.class) {
-            if (updateTask != null) {
-                updateTask.cancel();
-                updateTask = null;
-            }
-        }
-    }
-
-    private static void tickAll() {
+    public static void updateAll() {
         if (fscoreboards.isEmpty()) return;
-        long now = System.currentTimeMillis();
         for (FScoreboard b : fscoreboards.values()) {
-            b.tick(now);
+            b.requestUpdate();
         }
     }
 
-    private void tick(long now) {
-        if (removed) return;
-        if (!sidebarVisible) return;
-        if (defaultProvider == null && temporaryProvider == null) return;
+    public static synchronized void startScheduledUpdate(org.bukkit.plugin.Plugin plugin, long intervalTicks) {
+        stopScheduledUpdate();
+        if (plugin == null || intervalTicks <= 0) return;
+        scheduledUpdateTaskId = Bukkit.getScheduler().runTaskTimer(plugin, FScoreboard::updateAll,
+                intervalTicks, intervalTicks).getTaskId();
+    }
 
-        Player player = fplayer.getPlayer();
-        if (player == null || !player.isOnline()) return;
-
-        if (temporaryProvider != null && now >= temporaryExpireAt) {
-            temporaryProvider = null;
+    public static synchronized void stopScheduledUpdate() {
+        int id = scheduledUpdateTaskId;
+        if (id != -1) {
+            try { Bukkit.getScheduler().cancelTask(id); } catch (Throwable ignored) {}
+            scheduledUpdateTaskId = -1;
         }
-
-        requestUpdate();
     }
 
     public void setSidebarVisibility(boolean visible) {
@@ -177,10 +163,25 @@ public class FScoreboard {
     }
 
     public void setTemporarySidebar(final FSidebarProvider provider) {
-        int seconds = FactionsPlugin.getInstance().getConfig().getInt("scoreboard.expiration", 7);
-        temporaryProvider = provider;
-        temporaryExpireAt = System.currentTimeMillis() + Math.max(1L, seconds) * 1000L;
+        cancelTemporaryTask();
+        this.temporaryProvider = provider;
         requestUpdate();
+
+        int seconds = FactionsPlugin.getInstance().getConfig().getInt("scoreboard.expiration", 7);
+        long delay = Math.max(1L, seconds) * 20L;
+        this.temporaryTaskId = Bukkit.getScheduler().runTaskLater(FactionsPlugin.getInstance(), () -> {
+            this.temporaryTaskId = -1;
+            this.temporaryProvider = null;
+            requestUpdate();
+        }, delay).getTaskId();
+    }
+
+    private void cancelTemporaryTask() {
+        int id = this.temporaryTaskId;
+        if (id != -1) {
+            try { Bukkit.getScheduler().cancelTask(id); } catch (Throwable ignored) {}
+            this.temporaryTaskId = -1;
+        }
     }
 
     protected FPlayer getFPlayer() {
