@@ -243,6 +243,10 @@ scoreboard:
   # Title shown when the player is NOT in a faction (factionless). Falls back to default-title if not set.
   factionless-title: "&cSaberFactions"
   default-update-interval: 1 # in seconds. 0 = default (1s).
+  # Worlds in which the scoreboard will be hidden entirely.
+  # Players entering one of these worlds will see their main (vanilla) scoreboard.
+  # World names are case-insensitive. Leave empty to enable in every world.
+  disabled-worlds: []
   # This will show faction prefixes colored based on relation on name-tags and in the tab.
   #   The scoreboard needs to be enabled for this to work.
   default-prefixes: true

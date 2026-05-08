@@ -18,17 +18,18 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerChangedWorldEvent;
 
 public class FScoreboardListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onPlayerJoin(PlayerJoinEvent event) {
-        FScoreboard.updateAll();
+        FPlayer fp = com.massivecraft.factions.FPlayers.getInstance().getByPlayer(event.getPlayer());
+        if (fp != null) FScoreboard.update(fp);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPlayerQuit(PlayerQuitEvent event) {
-        FScoreboard.updateAll();
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -100,6 +101,13 @@ public class FScoreboardListener implements Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     public void onTerritoryChange(FPlayerEnteredFactionEvent event) {
         FScoreboard.update(event.getfPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onWorldChange(PlayerChangedWorldEvent event) {
+        com.massivecraft.factions.FPlayer fp =
+                com.massivecraft.factions.FPlayers.getInstance().getByPlayer(event.getPlayer());
+        if (fp != null) FScoreboard.update(fp);
     }
 }
 

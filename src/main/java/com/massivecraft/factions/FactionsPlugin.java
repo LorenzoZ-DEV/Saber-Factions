@@ -187,6 +187,7 @@ public class FactionsPlugin extends MPlugin {
                 if (sbIntervalSeconds <= 0L) sbIntervalSeconds = 1L;
                 com.massivecraft.factions.scoreboards.FScoreboard
                         .startScheduledUpdate(this, sbIntervalSeconds * 20L);
+                com.massivecraft.factions.scoreboards.FScoreboard.reloadDisabledWorlds(this);
             }
             Bukkit.getPluginManager().registerEvents(factionsPlayerListener = new FactionsPlayerListener(), this);
             Bukkit.getPluginManager().registerEvents(new com.massivecraft.factions.scoreboards.FScoreboardListener(), this);

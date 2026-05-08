@@ -58,6 +58,10 @@
                             <includes><include>**</include></includes>
                         </filter>
                         <filter>
+                            <artifact>com.github.ben-manes.caffeine:caffeine</artifact>
+                            <includes><include>**</include></includes>
+                        </filter>
+                        <filter>
                             <artifact>net.kyori:*</artifact>
                             <includes><include>**</include></includes>
                         </filter>
@@ -139,6 +143,10 @@
                         <relocation>
                             <pattern>fr.mrmicky.fastboard</pattern>
                             <shadedPattern>com.massivecraft.factions.shade.fastboard</shadedPattern>
+                        </relocation>
+                        <relocation>
+                            <pattern>com.github.benmanes.caffeine</pattern>
+                            <shadedPattern>com.massivecraft.factions.shade.caffeine</shadedPattern>
                         </relocation>
                     </relocations>
                 </configuration>
@@ -429,6 +437,12 @@
             <groupId>fr.mrmicky</groupId>
             <artifactId>fastboard</artifactId>
             <version>1.2.1</version>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+            <version>3.2.4</version>
             <scope>compile</scope>
         </dependency>
     </dependencies>

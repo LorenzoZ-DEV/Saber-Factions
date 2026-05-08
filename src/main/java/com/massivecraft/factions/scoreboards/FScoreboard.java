@@ -5,6 +5,8 @@ import com.massivecraft.factions.FPlayers;
 import com.massivecraft.factions.Faction;
 import com.massivecraft.factions.FactionsPlugin;
 import com.massivecraft.factions.zcore.util.TextUtil;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.scoreboard.DisplaySlot;
@@ -16,8 +18,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
 public class FScoreboard {
@@ -30,6 +35,16 @@ public class FScoreboard {
     private static final Map<FPlayer, FScoreboard> fscoreboards = new ConcurrentHashMap<>();
 
     private static volatile int scheduledUpdateTaskId = -1;
+    private static volatile long batchIntervalTicks = 20L;
+    private static final java.util.concurrent.atomic.AtomicInteger batchCursor = new java.util.concurrent.atomic.AtomicInteger(0);
+    private static volatile List<FScoreboard> batchSnapshot = Collections.emptyList();
+
+    private static final Cache<FPlayer, Boolean> RENDER_DEDUP = Caffeine.newBuilder()
+            .expireAfterWrite(50, TimeUnit.MILLISECONDS)
+            .maximumSize(4096)
+            .build();
+
+    private static volatile Set<String> disabledWorlds = Collections.emptySet();
 
     private final FPlayer fplayer;
     private volatile Scoreboard scoreboard;
@@ -126,8 +141,53 @@ public class FScoreboard {
     public static synchronized void startScheduledUpdate(org.bukkit.plugin.Plugin plugin, long intervalTicks) {
         stopScheduledUpdate();
         if (plugin == null || intervalTicks <= 0) return;
-        scheduledUpdateTaskId = Bukkit.getScheduler().runTaskTimer(plugin, FScoreboard::updateAll,
-                intervalTicks, intervalTicks).getTaskId();
+        batchIntervalTicks = intervalTicks;
+        batchCursor.set(0);
+        batchSnapshot = Collections.emptyList();
+        scheduledUpdateTaskId = Bukkit.getScheduler().runTaskTimer(plugin, FScoreboard::tickBatch,
+                1L, 1L).getTaskId();
+    }
+
+    private static void tickBatch() {
+        if (fscoreboards.isEmpty()) return;
+
+        List<FScoreboard> snapshot = batchSnapshot;
+        int cursor = batchCursor.get();
+
+        if (snapshot.isEmpty() || cursor >= snapshot.size()) {
+
+            snapshot = new ArrayList<>(fscoreboards.values());
+            batchSnapshot = snapshot;
+            cursor = 0;
+            batchCursor.set(0);
+            if (snapshot.isEmpty()) return;
+        }
+
+        long interval = Math.max(1L, batchIntervalTicks);
+        int total = snapshot.size();
+        int slice = (int) Math.max(1L, (total + interval - 1) / interval);
+        int end = Math.min(cursor + slice, total);
+
+        for (int i = cursor; i < end; i++) {
+            FScoreboard b = snapshot.get(i);
+            if (b == null || b.removed || !b.sidebarVisible) continue;
+
+            FPlayer fp = b.fplayer;
+            if (fp == null) continue;
+            Player player = fp.getPlayer();
+            if (player == null || !player.isOnline()) continue;
+            if (!disabledWorlds.isEmpty()
+                    && player.getWorld() != null
+                    && disabledWorlds.contains(player.getWorld().getName().toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+
+            try {
+                b.requestUpdate();
+            } catch (Throwable t) {
+            }
+        }
+        batchCursor.set(end);
     }
 
     public static synchronized void stopScheduledUpdate() {
@@ -136,6 +196,40 @@ public class FScoreboard {
             try { Bukkit.getScheduler().cancelTask(id); } catch (Throwable ignored) {}
             scheduledUpdateTaskId = -1;
         }
+        batchSnapshot = Collections.emptyList();
+        batchCursor.set(0);
+    }
+
+    public static void reloadDisabledWorlds(org.bukkit.plugin.Plugin plugin) {
+        Set<String> newSet;
+        if (plugin == null) {
+            newSet = Collections.emptySet();
+        } else {
+            HashSet<String> tmp = new HashSet<>();
+            List<String> raw = plugin.getConfig().getStringList("scoreboard.disabled-worlds");
+            if (raw != null && !raw.isEmpty()) {
+                for (String s : raw) {
+                    if (s != null && !s.isEmpty()) tmp.add(s.toLowerCase(Locale.ROOT));
+                }
+            } else {
+
+                Object single = plugin.getConfig().get("scoreboard.disabled-worlds");
+                if (single instanceof String) {
+                    String s = (String) single;
+                    if (!s.isEmpty()) tmp.add(s.toLowerCase(Locale.ROOT));
+                }
+            }
+            newSet = tmp.isEmpty() ? Collections.<String>emptySet() : tmp;
+        }
+        disabledWorlds = newSet;
+        RENDER_DEDUP.invalidateAll();
+        updateAll();
+    }
+
+    public static boolean isWorldDisabled(String worldName) {
+        if (worldName == null) return false;
+        Set<String> set = disabledWorlds;
+        return !set.isEmpty() && set.contains(worldName.toLowerCase(Locale.ROOT));
     }
 
     public void setSidebarVisibility(boolean visible) {
@@ -266,6 +360,21 @@ public class FScoreboard {
         Player player = fplayer.getPlayer();
         if (player == null || !player.isOnline()) return;
 
+        if (player.getWorld() != null && isWorldDisabled(player.getWorld().getName())) {
+            unregisterObjective();
+            try {
+                ScoreboardManager mgr = Bukkit.getScoreboardManager();
+                if (mgr != null && player.getScoreboard() != mgr.getMainScoreboard()) {
+                    player.setScoreboard(mgr.getMainScoreboard());
+                }
+            } catch (Throwable ignored) {
+            }
+            return;
+        }
+
+        if (RENDER_DEDUP.getIfPresent(fplayer) != null) return;
+        RENDER_DEDUP.put(fplayer, Boolean.TRUE);
+
         try {
             if (scoreboard != null && player.getScoreboard() != scoreboard) {
                 player.setScoreboard(scoreboard);
@@ -368,15 +477,23 @@ public class FScoreboard {
                     try { scoreboard.resetScores(old); } catch (Throwable ignored) {}
                 }
             }
-            int score = parsed.size();
-            for (String line : parsed) {
+            int n = parsed.size();
+            int prevN = previous.size();
+            for (int i = 0; i < n; i++) {
+                String line = parsed.get(i);
+                int score = n - i;
+
+                int prevIdx = previous.indexOf(line);
+                if (prevIdx >= 0 && (prevN - prevIdx) == score) {
+                    continue;
+                }
+
                 try {
                     obj.getScore(line).setScore(score);
                 } catch (Throwable ex) {
                     FactionsPlugin.getInstance().getLogger().log(Level.WARNING,
                             "[FScoreboard] setScore failed for line '" + line + "'", ex);
                 }
-                score--;
             }
             lastLines = new ArrayList<>(parsed);
         }
