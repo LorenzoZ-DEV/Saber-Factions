@@ -39,10 +39,31 @@ public class FScoreboard {
     private static final java.util.concurrent.atomic.AtomicInteger batchCursor = new java.util.concurrent.atomic.AtomicInteger(0);
     private static volatile List<FScoreboard> batchSnapshot = Collections.emptyList();
 
-    private static final Cache<FPlayer, Boolean> RENDER_DEDUP = Caffeine.newBuilder()
-            .expireAfterWrite(50, TimeUnit.MILLISECONDS)
-            .maximumSize(4096)
+    private static final long CONTENT_TTL_MS = 750L;
+    private static final Cache<FPlayer, RenderedContent> CONTENT_CACHE = Caffeine.newBuilder()
+            .expireAfterWrite(CONTENT_TTL_MS, TimeUnit.MILLISECONDS)
+            .maximumSize(8192)
             .build();
+
+    private static final class RenderedContent {
+        final String title;
+        final List<String> lines;
+        RenderedContent(String title, List<String> lines) {
+            this.title = title;
+            this.lines = lines;
+        }
+    }
+
+    public static void invalidateCache(FPlayer fplayer) {
+        if (fplayer != null) CONTENT_CACHE.invalidate(fplayer);
+    }
+
+    public static void invalidateCache(Faction faction) {
+        if (faction == null) return;
+        for (FPlayer fp : faction.getFPlayersWhereOnline(true)) {
+            CONTENT_CACHE.invalidate(fp);
+        }
+    }
 
     private static volatile Set<String> disabledWorlds = Collections.emptySet();
 
@@ -121,12 +142,16 @@ public class FScoreboard {
     public static void update(FPlayer fplayer) {
         if (fplayer == null) return;
         FScoreboard b = fscoreboards.get(fplayer);
-        if (b != null) b.requestUpdate();
+        if (b != null) {
+            CONTENT_CACHE.invalidate(fplayer);
+            b.requestUpdate();
+        }
     }
 
     public static void updateForFaction(Faction faction) {
         if (faction == null) return;
         for (FPlayer fp : faction.getFPlayersWhereOnline(true)) {
+            CONTENT_CACHE.invalidate(fp);
             update(fp);
         }
     }
@@ -222,7 +247,7 @@ public class FScoreboard {
             newSet = tmp.isEmpty() ? Collections.<String>emptySet() : tmp;
         }
         disabledWorlds = newSet;
-        RENDER_DEDUP.invalidateAll();
+        CONTENT_CACHE.invalidateAll();
         updateAll();
     }
 
@@ -372,8 +397,6 @@ public class FScoreboard {
             return;
         }
 
-        if (RENDER_DEDUP.getIfPresent(fplayer) != null) return;
-        RENDER_DEDUP.put(fplayer, Boolean.TRUE);
 
         try {
             if (scoreboard != null && player.getScoreboard() != scoreboard) {
@@ -424,40 +447,54 @@ public class FScoreboard {
     }
 
     private synchronized void renderAndApply(Objective obj, FSidebarProvider provider) {
-        String title = provider.getTitle(fplayer);
-        List<String> raw = provider.getLines(fplayer);
-        if (raw == null) raw = Collections.emptyList();
+        RenderedContent cached = CONTENT_CACHE.getIfPresent(fplayer);
+        String parsedTitle;
+        ArrayList<String> parsed;
 
-        int size = Math.min(raw.size(), MAX_LINES);
-        ArrayList<String> parsed = new ArrayList<>(size);
-        HashSet<String> seen = new HashSet<>();
-        int blankCounter = 0;
-        for (int i = 0; i < size; i++) {
-            String line = raw.get(i);
-            String parsedLine = line == null ? "" : TextUtil.parse(line);
+        if (cached != null) {
+            parsedTitle = cached.title;
+            parsed = (ArrayList<String>) cached.lines;
+        } else {
+            String title = provider.getTitle(fplayer);
+            List<String> raw = provider.getLines(fplayer);
+            if (raw == null) raw = Collections.emptyList();
 
-            if (isVisuallyBlank(parsedLine)) {
-                parsedLine = emptyPlaceholder(blankCounter++);
-            }
+            int size = Math.min(raw.size(), MAX_LINES);
+            parsed = new ArrayList<>(size);
+            HashSet<String> seen = new HashSet<>();
+            int blankCounter = 0;
+            for (int i = 0; i < size; i++) {
+                String line = raw.get(i);
+                String parsedLine = line == null ? "" : TextUtil.parse(line);
 
-            if (parsedLine.length() > MAX_LINE_LENGTH) {
-                parsedLine = parsedLine.substring(0, MAX_LINE_LENGTH);
-            }
-            String unique = parsedLine;
-            int pad = 0;
-            while (!seen.add(unique) && pad < DUPE_SUFFIXES.length) {
-                unique = parsedLine + DUPE_SUFFIXES[pad++];
-                if (unique.length() > MAX_LINE_LENGTH) {
-                    unique = unique.substring(0, MAX_LINE_LENGTH);
+                if (isVisuallyBlank(parsedLine)) {
+                    parsedLine = emptyPlaceholder(blankCounter++);
                 }
+
+                if (parsedLine.length() > MAX_LINE_LENGTH) {
+                    parsedLine = parsedLine.substring(0, MAX_LINE_LENGTH);
+                }
+                String unique = parsedLine;
+                int pad = 0;
+                while (!seen.add(unique) && pad < DUPE_SUFFIXES.length) {
+                    unique = parsedLine + DUPE_SUFFIXES[pad++];
+                    if (unique.length() > MAX_LINE_LENGTH) {
+                        unique = unique.substring(0, MAX_LINE_LENGTH);
+                    }
+                }
+                parsed.add(unique);
             }
-            parsed.add(unique);
+
+            parsedTitle = title == null ? " " : TextUtil.parse(title);
+            if (parsedTitle.length() > MAX_TITLE_LENGTH) parsedTitle = parsedTitle.substring(0, MAX_TITLE_LENGTH);
+            if (parsedTitle.isEmpty()) parsedTitle = " ";
+
+            CONTENT_CACHE.put(fplayer, new RenderedContent(parsedTitle, parsed));
         }
 
-        String parsedTitle = title == null ? " " : TextUtil.parse(title);
-        if (parsedTitle.length() > MAX_TITLE_LENGTH) parsedTitle = parsedTitle.substring(0, MAX_TITLE_LENGTH);
-        if (parsedTitle.isEmpty()) parsedTitle = " ";
-
+        if (parsedTitle.equals(lastTitle) && parsed.equals(lastLines)) {
+            return;
+        }
 
         if (lastTitle == null || !lastTitle.equals(parsedTitle)) {
             try {

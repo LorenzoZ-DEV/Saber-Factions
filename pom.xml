@@ -30,7 +30,15 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.10.1</version>
+                <version>3.13.0</version>
+                <configuration>
+                    <debug>true</debug>
+                    <debuglevel>source,lines</debuglevel>
+                    <parameters>false</parameters>
+                    <optimize>true</optimize>
+                    <showWarnings>false</showWarnings>
+                    <showDeprecation>false</showDeprecation>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -44,6 +52,7 @@
                 <configuration>
                     <minimizeJar>true</minimizeJar>
                     <createDependencyReducedPom>false</createDependencyReducedPom>
+                    <shadedArtifactAttached>false</shadedArtifactAttached>
                     <filters>
                         <filter>
                             <artifact>org.reflections:reflections</artifact>
@@ -103,11 +112,34 @@
                                 <exclude>META-INF/versions/**</exclude>
                                 <exclude>META-INF/native-image/**</exclude>
                                 <exclude>META-INF/proguard/**</exclude>
+                                <exclude>META-INF/INDEX.LIST</exclude>
+                                <exclude>META-INF/DEPENDENCIES</exclude>
+                                <exclude>META-INF/MANIFEST.MF.bak</exclude>
+                                <exclude>META-INF/LICENSE</exclude>
+                                <exclude>META-INF/LICENSE.*</exclude>
+                                <exclude>META-INF/license/**</exclude>
+                                <exclude>META-INF/NOTICE</exclude>
+                                <exclude>META-INF/NOTICE.*</exclude>
+                                <exclude>META-INF/notice/**</exclude>
+                                <exclude>META-INF/README</exclude>
+                                <exclude>META-INF/README.*</exclude>
+                                <exclude>META-INF/AUTHORS</exclude>
+                                <exclude>META-INF/CHANGES</exclude>
+                                <exclude>META-INF/CHANGELOG*</exclude>
+                                <exclude>META-INF/*.kotlin_module</exclude>
+                                <exclude>META-INF/io.netty.versions.properties</exclude>
                                 <exclude>module-info.class</exclude>
+                                <exclude>**/package-info.class</exclude>
                                 <exclude>*.html</exclude>
                                 <exclude>*.txt</exclude>
+                                <exclude>*.md</exclude>
+                                <exclude>*.markdown</exclude>
+                                <exclude>*.proto</exclude>
                                 <exclude>LICENSE*</exclude>
                                 <exclude>NOTICE*</exclude>
+                                <exclude>README*</exclude>
+                                <exclude>CHANGELOG*</exclude>
+                                <exclude>AUTHORS*</exclude>
                             </excludes>
                         </filter>
                     </filters>
@@ -444,6 +476,16 @@
             <artifactId>caffeine</artifactId>
             <version>3.2.4</version>
             <scope>compile</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.google.errorprone</groupId>
+                    <artifactId>error_prone_annotations</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.checkerframework</groupId>
+                    <artifactId>checker-qual</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 
